@@ -1,6 +1,4 @@
-// ================================
-// src/lib/utils/api-client.ts
-// ================================
+// src/lib/utils/api-client.ts 
 import { ApiResponse } from '@/lib/types';
 
 class ApiClient {
@@ -9,13 +7,16 @@ class ApiClient {
 
   constructor() {
     this.baseURL = process.env.NEXT_PUBLIC_API_URL || '/api';
+    console.log('🔵 [API_CLIENT] Initialized with baseURL:', this.baseURL);
   }
 
   setToken(token: string) {
+    console.log('🔵 [API_CLIENT] Setting token:', token.substring(0, 20) + '...');
     this.token = token;
   }
 
   clearToken() {
+    console.log('🔵 [API_CLIENT] Clearing token');
     this.token = null;
   }
 
@@ -24,6 +25,7 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseURL}${endpoint}`;
+    console.log('🔵 [API_CLIENT] Making request to:', url);
     
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -32,31 +34,51 @@ class ApiClient {
 
     if (this.token) {
       headers.Authorization = `Bearer ${this.token}`;
+      console.log('🔵 [API_CLIENT] Added Authorization header');
     }
 
     try {
+      console.log('🔵 [API_CLIENT] Sending request with options:', {
+        method: options.method || 'GET',
+        hasAuth: !!this.token,
+        hasBody: !!options.body
+      });
+
       const response = await fetch(url, {
         ...options,
         headers,
+        credentials: 'include', // Para incluir cookies
       });
 
-      const data = await response.json();
+      console.log('🔵 [API_CLIENT] Response status:', response.status);
+
+      let data;
+      try {
+        data = await response.json();
+        console.log('🔵 [API_CLIENT] Response data:', data);
+      } catch (jsonError) {
+        console.error('❌ [API_CLIENT] Failed to parse JSON:', jsonError);
+        data = { error: 'Invalid server response' };
+      }
 
       if (!response.ok) {
+        console.log('❌ [API_CLIENT] Request failed with status:', response.status);
         return {
           success: false,
-          error: data.error || 'An error occurred',
+          error: data.error || `HTTP ${response.status}: ${response.statusText}`,
         };
       }
 
+      console.log('✅ [API_CLIENT] Request successful');
       return {
         success: true,
         data,
       };
     } catch (error) {
+      console.error('❌ [API_CLIENT] Network error:', error);
       return {
         success: false,
-        error: 'Network error occurred',
+        error: 'Network error - please check your connection',
       };
     }
   }
@@ -85,22 +107,27 @@ class ApiClient {
 
   // Auth methods
   async login(email: string, password: string) {
+    console.log('🔵 [API_CLIENT] Login attempt for:', email);
     return this.post('/auth/login', { email, password });
   }
 
   async register(userData: any) {
+    console.log('🔵 [API_CLIENT] Register attempt for:', userData.email);
     return this.post('/auth/register', userData);
   }
 
   async logout() {
+    console.log('🔵 [API_CLIENT] Logout request');
     return this.post('/auth/logout');
   }
 
   async getProfile() {
+    console.log('🔵 [API_CLIENT] Getting user profile');
     return this.get('/users');
   }
 
   async testAuth() {
+    console.log('🔵 [API_CLIENT] Testing authentication');
     return this.get('/test-auth');
   }
 

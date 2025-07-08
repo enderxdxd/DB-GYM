@@ -1,6 +1,9 @@
+// ================================
+// src/app/api/auth/register/route.ts - VERSION CORRIGIDA
+// ================================
 import { NextRequest, NextResponse } from 'next/server';
 import { UserService } from '@/lib/services/user.service';
-import { generateTokens } from '@/lib/auth/jwt';
+import { generateTokensEdge } from '@/lib/auth/edge-jwt';
 
 const userService = new UserService();
 
@@ -58,7 +61,7 @@ export async function POST(request: NextRequest) {
     });
 
     console.log('🔵 [REGISTER] Generating tokens...');
-    const { accessToken, refreshToken } = generateTokens(user.user_id, user.email);
+    const { accessToken, refreshToken } = await generateTokensEdge(user.user_id, user.email);
     const { password_hash, ...userWithoutPassword } = user;
 
     console.log('🔵 [REGISTER] Setting up response...');

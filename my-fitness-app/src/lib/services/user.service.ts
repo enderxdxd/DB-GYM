@@ -59,7 +59,7 @@ export class UserService {
         created_at: user.created_at
       });
       
-      return user;
+      return user as User;
     } catch (error) {
       console.error('❌ [USER_SERVICE] Error creating user:', error);
       console.error('❌ [USER_SERVICE] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
@@ -75,7 +75,7 @@ export class UserService {
       
       if (result && Array.isArray(result) && result.length > 0) {
         console.log('✅ [USER_SERVICE] User found:', { user_id: result[0].user_id, email: result[0].email });
-        return result[0];
+        return result[0] as User;
       } else {
         console.log('ℹ️ [USER_SERVICE] No user found with email:', email);
         return null;
@@ -94,7 +94,7 @@ export class UserService {
       
       if (result && Array.isArray(result) && result.length > 0) {
         console.log('✅ [USER_SERVICE] User found:', { user_id: result[0].user_id, email: result[0].email });
-        return result[0];
+        return result[0] as User;
       } else {
         console.log('ℹ️ [USER_SERVICE] No user found with ID:', userId);
         return null;
@@ -108,42 +108,45 @@ export class UserService {
   async updateUser(userId: number, updateData: Partial<CreateUserData>): Promise<User> {
     console.log('🔵 [USER_SERVICE] Updating user:', userId);
     console.log('🔵 [USER_SERVICE] Update data:', updateData);
-    
+
     try {
-      const fields = [];
-      const values = [];
-      let paramIndex = 1;
-      let setClause = '';
+      const updates: string[] = [];
+      const params: any[] = [];
 
       for (const [key, value] of Object.entries(updateData)) {
         if (value !== undefined && key !== 'password' && key !== 'userId') {
-          fields.push(key);
-          values.push(value);
+          updates.push(`${key} = $${updates.length + 1}`);
+          params.push(value);
         }
       }
 
-      let hashedPassword;
       if (updateData.password) {
         console.log('🔵 [USER_SERVICE] Hashing new password...');
-        hashedPassword = await bcrypt.hash(updateData.password, 12);
-        fields.push('password_hash');
-        values.push(hashedPassword);
+        const hashedPassword = await bcrypt.hash(updateData.password, 12);
+        updates.push(`password_hash = $${updates.length + 1}`);
+        params.push(hashedPassword);
       }
 
-      setClause = fields.map((field, idx) => `${field} = $${idx + 1}`).join(', ');
+      if (updates.length === 0) {
+        throw new Error('No fields to update');
+      }
 
-      // Montar query dinâmica
-      const query = `UPDATE users SET ${setClause} WHERE user_id = $$${fields.length + 1} RETURNING *`;
-      const params = [...values, userId];
-      console.log('🔵 [USER_SERVICE] Executing update query:', query, params);
-      const result = await sql.unsafe(query, ...params);
-      
+      params.push(userId);
+      const setClause = updates.join(', ');
+      const query = `UPDATE users SET ${setClause} WHERE user_id = $${params.length} RETURNING *`;
+
+      // Use sql.unsafe só com a query montada e sem array de params
+      const result = await sql.unsafe(query.replace(/\$\d+/g, () => {
+        const v = params.shift();
+        return typeof v === 'string' ? `'${v.replace(/'/g, "''")}'` : v;
+      }));
+
       if (!result || (Array.isArray(result) && result.length === 0)) {
         console.error('❌ [USER_SERVICE] User not found for update');
         throw new Error('User not found');
       }
-      
-      const user = Array.isArray(result) ? result[0] : result;
+
+      const user = Array.isArray(result) ? result[0] as unknown as User : result as unknown as User;
       console.log('✅ [USER_SERVICE] User updated successfully');
       return user;
     } catch (error) {

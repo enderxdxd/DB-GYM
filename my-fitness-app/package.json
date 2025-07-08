@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.1",
-    "@types/jsonwebtoken": "^9.0.10",
     "drizzle-kit": "^0.31.4",
     "drizzle-orm": "^0.44.2",
     "jsonwebtoken": "^9.0.2",
@@ -20,6 +19,7 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

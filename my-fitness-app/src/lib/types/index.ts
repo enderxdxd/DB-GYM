@@ -23,3 +23,5 @@ export type SubscriptionStatus = 'active' | 'cancelled' | 'expired';
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
 export type GenderType = 'male' | 'female' | 'other';
 export type CurrencyCode = 'USD' | 'CAD' | 'EUR';
+
+export * from './workout.types';

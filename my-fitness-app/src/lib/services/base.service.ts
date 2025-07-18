@@ -1,3 +1,6 @@
+// ================================
+// src/lib/services/base.service.ts - VERSÃO CORRIGIDA PARA NEON
+// ================================
 import { sql } from '@/lib/database/neon';
 
 export abstract class BaseService {
@@ -10,15 +13,52 @@ export abstract class BaseService {
     console.log('🔵 [BASE_SERVICE] Params:', params);
     
     try {
-      const result = await sql.unsafe(queryText);
+      let result: any[];
+      
+      if (params.length === 0) {
+        // Para queries sem parâmetros, usar sql.unsafe
+        result = await sql.unsafe(queryText) as unknown as any[];
+      } else {
+        // Para queries com parâmetros, construir a query usando template literals
+        // Substituir $1, $2, etc. pelos valores reais de forma segura
+        const values = params.map(param => {
+          if (param === null || param === undefined) {
+            return 'NULL';
+          }
+          if (typeof param === 'string') {
+            // Escapar aspas simples duplicando-as
+            return `'${param.replace(/'/g, "''")}'`;
+          }
+          if (typeof param === 'number') {
+            return param.toString();
+          }
+          if (typeof param === 'boolean') {
+            return param ? 'TRUE' : 'FALSE';
+          }
+          if (param instanceof Date) {
+            return `'${param.toISOString()}'`;
+          }
+          // Para outros tipos, converter para string e tratar como string
+          return `'${String(param).replace(/'/g, "''")}'`;
+        });
+
+        // Substituir placeholders $1, $2, etc. pelos valores
+        let interpolatedQuery = queryText;
+        values.forEach((value, index) => {
+          const placeholder = `${index + 1}`;
+          interpolatedQuery = interpolatedQuery.replace(new RegExp(`\\${placeholder}\\b`, 'g'), value);
+        });
+
+        console.log('🔵 [BASE_SERVICE] Interpolated query:', interpolatedQuery);
+        
+        result = await sql.unsafe(interpolatedQuery) as unknown as any[];
+      }
+      
       console.log('✅ [BASE_SERVICE] Query executed successfully');
-      console.log('✅ [BASE_SERVICE] Result:', result);
-      console.log('✅ [BASE_SERVICE] Result type:', typeof result);
-      console.log('✅ [BASE_SERVICE] Is array:', Array.isArray(result));
+      console.log('✅ [BASE_SERVICE] Result count:', result?.length || 0);
+      console.log('✅ [BASE_SERVICE] First result sample:', result?.[0] ? JSON.stringify(result[0], null, 2) : 'No results');
       
       const typedResult = result as unknown as T[];
-      console.log('✅ [BASE_SERVICE] Typed result:', typedResult);
-      
       return typedResult;
     } catch (error) {
       console.error('❌ [BASE_SERVICE] Database query error:', error);
@@ -31,7 +71,7 @@ export abstract class BaseService {
         console.error('❌ [BASE_SERVICE] Error name:', error.name);
       }
       
-      throw new Error(`Database operation failed: ${error}`);
+      throw new Error(`Database operation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -47,7 +87,7 @@ export abstract class BaseService {
       const result = await this.query<T>(queryText, params);
       const firstResult = result.length > 0 ? result[0] : null;
       
-      console.log('✅ [BASE_SERVICE] QueryOne result:', firstResult);
+      console.log('✅ [BASE_SERVICE] QueryOne result:', firstResult ? 'Found' : 'Not found');
       return firstResult;
     } catch (error) {
       console.error('❌ [BASE_SERVICE] QueryOne error:', error);
@@ -120,10 +160,14 @@ export abstract class BaseService {
 
     for (const [key, value] of Object.entries(updateData)) {
       if (value !== undefined && key !== idField) {
-        fields.push(`${key} = $${paramIndex}`);
+        fields.push(`${key} = ${paramIndex}`);
         params.push(value);
         paramIndex++;
       }
+    }
+
+    if (fields.length === 0) {
+      throw new Error('No fields to update');
     }
 
     params.push(idValue);
@@ -131,7 +175,7 @@ export abstract class BaseService {
     const query = `
       UPDATE ${table} 
       SET ${fields.join(', ')}
-      WHERE ${idField} = $${paramIndex}
+      WHERE ${idField} = ${paramIndex}
       RETURNING *
     `;
 
@@ -162,7 +206,7 @@ export abstract class BaseService {
       const whereConditions = [];
       for (const [key, value] of Object.entries(conditions)) {
         if (value !== undefined && value !== null) {
-          whereConditions.push(`${key} = $${paramIndex}`);
+          whereConditions.push(`${key} = ${paramIndex}`);
           params.push(value);
           paramIndex++;
         }
@@ -177,18 +221,57 @@ export abstract class BaseService {
     }
 
     if (limit) {
-      query += ` LIMIT $${paramIndex}`;
+      query += ` LIMIT ${paramIndex}`;
       params.push(limit);
       paramIndex++;
     }
 
     if (offset) {
-      query += ` OFFSET $${paramIndex}`;
+      query += ` OFFSET ${paramIndex}`;
       params.push(offset);
     }
 
     console.log('✅ [BASE_SERVICE] Built select query:', query);
     console.log('✅ [BASE_SERVICE] Select params:', params);
+
+    return { query, params };
+  }
+
+  protected buildInsertQuery(
+    table: string,
+    data: Record<string, any>,
+    returning: string = '*'
+  ): { query: string; params: any[] } {
+    console.log('🔵 [BASE_SERVICE] Building insert query...');
+    console.log('🔵 [BASE_SERVICE] Table:', table);
+    console.log('🔵 [BASE_SERVICE] Data:', data);
+    
+    const fields = [];
+    const placeholders = [];
+    const params = [];
+    let paramIndex = 1;
+
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== undefined) {
+        fields.push(key);
+        placeholders.push(`${paramIndex}`);
+        params.push(value);
+        paramIndex++;
+      }
+    }
+
+    if (fields.length === 0) {
+      throw new Error('No fields to insert');
+    }
+
+    const query = `
+      INSERT INTO ${table} (${fields.join(', ')})
+      VALUES (${placeholders.join(', ')})
+      RETURNING ${returning}
+    `;
+
+    console.log('✅ [BASE_SERVICE] Built insert query:', query);
+    console.log('✅ [BASE_SERVICE] Insert params:', params);
 
     return { query, params };
   }

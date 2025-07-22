@@ -1,3 +1,6 @@
+// ================================
+// src/app/(dashboard)/workouts/new/page.tsx - CORRIGIDA
+// ================================
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -20,7 +23,14 @@ export default function NewWorkoutPage() {
 
   const handleSuccess = (workout: any) => {
     console.log('✅ Workout created successfully:', workout);
-    router.push(`/workouts/${workout.workout_id}`);
+    
+    // Disparar evento para atualizar outras páginas
+    window.dispatchEvent(new CustomEvent('workoutCreated', { 
+      detail: workout 
+    }));
+    
+    // Redirecionar para a página de workouts
+    router.push('/workouts');
   };
 
   const handleCancel = () => {

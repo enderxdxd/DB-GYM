@@ -1,9 +1,8 @@
 // ================================
-// src/app/api/workouts/route.ts - ATUALIZADA PARA SUA ESTRUTURA
+// src/app/api/workouts/route.ts - CORRIGIDA
 // ================================
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/database/neon';
-import { getAuthContext, requireTrainerRole, PERMISSION_DENIED_RESPONSE, UNAUTHORIZED_RESPONSE } from '@/lib/auth/permissions';
 
 interface ExerciseSet {
   set_number: number;
@@ -37,6 +36,182 @@ interface WorkoutData {
   exercises?: Exercise[];
 }
 
+// Função auxiliar para buscar workout completo
+export async function getCompleteWorkout(workoutId: number) {
+  try {
+    console.log('🔵 [WORKOUTS] Getting complete workout:', workoutId);
+
+    // Buscar workout com info do programa
+    const workout = await sql`
+      SELECT w.*, p.title as program_title, p.category as program_category
+      FROM workouts w
+      INNER JOIN programs p ON w.program_id = p.program_id
+      WHERE w.workout_id = ${workoutId}
+    ` as unknown as any[];
+
+    if (workout.length === 0) {
+      console.log('🔶 [WORKOUTS] Workout not found:', workoutId);
+      return null;
+    }
+
+    // Buscar exercícios com suas séries
+    const exercises = await sql`
+      SELECT 
+        e.*,
+        COALESCE(
+          json_agg(
+            CASE WHEN es.set_id IS NOT NULL THEN
+              json_build_object(
+                'set_id', es.set_id,
+                'set_number', es.set_number,
+                'target_reps', es.target_reps,
+                'actual_reps', es.actual_reps,
+                'target_weight', es.target_weight,
+                'actual_weight', es.actual_weight,
+                'target_duration_seconds', es.target_duration_seconds,
+                'actual_duration_seconds', es.actual_duration_seconds,
+                'distance_meters', es.distance_meters,
+                'rest_seconds', es.rest_seconds,
+                'notes', es.notes,
+                'completed', es.completed,
+                'completed_at', es.completed_at
+              )
+            END ORDER BY es.set_number
+          ) FILTER (WHERE es.set_id IS NOT NULL), 
+          '[]'::json
+        ) as sets
+      FROM exercises e
+      LEFT JOIN exercise_sets es ON e.exercise_id = es.exercise_id
+      WHERE e.workout_id = ${workoutId}
+      GROUP BY e.exercise_id
+      ORDER BY e.order_index
+    ` as unknown as any[];
+
+    return {
+      ...workout[0],
+      exercises: exercises
+    };
+  } catch (error) {
+    console.error('❌ [WORKOUTS] Error getting complete workout:', error);
+    return null;
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const userId = request.headers.get('x-user-id');
+    const { searchParams } = new URL(request.url);
+    const programId = searchParams.get('program_id');
+    const includeExercises = searchParams.get('include_exercises') === 'true';
+
+    console.log('🔵 [WORKOUTS] GET request started');
+    console.log('🔵 [WORKOUTS] Params:', { userId, programId, includeExercises });
+
+    let workouts: any[] = [];
+
+    if (programId) {
+      // Buscar workouts de um programa específico
+      console.log('🔵 [WORKOUTS] Fetching workouts for program:', programId);
+      
+      workouts = await sql`
+        SELECT 
+          w.*,
+          p.title as program_title,
+          p.category as program_category
+        FROM workouts w
+        INNER JOIN programs p ON w.program_id = p.program_id
+        WHERE w.program_id = ${parseInt(programId)}
+        ORDER BY w.sequence_order ASC, w.created_at DESC
+      ` as unknown as any[];
+
+    } else if (userId) {
+      // Buscar todos os workouts do usuário baseado nas suas subscriptions
+      console.log('🔵 [WORKOUTS] Fetching workouts for user:', userId);
+      
+      workouts = await sql`
+        SELECT DISTINCT
+          w.*,
+          p.title as program_title,
+          p.category as program_category
+        FROM workouts w
+        INNER JOIN programs p ON w.program_id = p.program_id
+        INNER JOIN subscriptions s ON s.program_id = p.program_id
+        WHERE s.user_id = ${parseInt(userId)} 
+          AND s.status = 'active'
+        ORDER BY w.created_at DESC
+      ` as unknown as any[];
+
+    } else {
+      // Fallback: buscar todos os workouts (para debug)
+      console.log('🔵 [WORKOUTS] Fetching all workouts (fallback)');
+      
+      workouts = await sql`
+        SELECT 
+          w.*,
+          p.title as program_title,
+          p.category as program_category
+        FROM workouts w
+        INNER JOIN programs p ON w.program_id = p.program_id
+        ORDER BY w.created_at DESC
+        LIMIT 50
+      ` as unknown as any[];
+    }
+
+    console.log('🔵 [WORKOUTS] Found workouts:', workouts.length);
+
+    if (workouts.length > 0) {
+      console.log('🔵 [WORKOUTS] Sample results:', workouts.slice(0, 2).map(w => ({
+        workout_id: w.workout_id,
+        title: w.title,
+        program_title: w.program_title
+      })));
+    }
+
+    // Se solicitado, incluir exercícios completos
+    let workoutsWithExercises = workouts;
+    if (includeExercises && workouts.length > 0) {
+      console.log('🔵 [WORKOUTS] Including exercises for workouts');
+      
+      try {
+        workoutsWithExercises = await Promise.all(
+          workouts.map(async (workout) => {
+            const completeWorkout = await getCompleteWorkout(workout.workout_id);
+            return completeWorkout || workout;
+          })
+        );
+      } catch (exerciseError) {
+        console.error('❌ [WORKOUTS] Error loading exercises:', exerciseError);
+        // Continue with basic workouts if exercise loading fails
+        workoutsWithExercises = workouts;
+      }
+    }
+
+    console.log('✅ [WORKOUTS] Successfully found workouts:', workoutsWithExercises.length);
+
+    return NextResponse.json({ 
+      success: true, 
+      data: workoutsWithExercises,
+      meta: {
+        total: workoutsWithExercises.length,
+        user_specific: !!userId,
+        program_specific: !!programId,
+        includes_exercises: includeExercises
+      }
+    }, { status: 200 });
+
+  } catch (error) {
+    console.error('❌ [WORKOUTS] Error in GET:', error);
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: 'Failed to fetch workouts',
+        details: error instanceof Error ? error.message : String(error)
+      },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const userId = request.headers.get('x-user-id');
@@ -47,11 +222,6 @@ export async function POST(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 401 });
     }
-
-    // Temporariamente simplificado - assumir que é trainer para debug
-    const isTrainer = true; // TODO: Restaurar lógica de roles após debug
-    
-    console.log('🔵 [WORKOUTS] User info (simplified):', { userId, isTrainer });
 
     // Validações básicas
     if (!workoutData.program_id || !workoutData.title?.trim()) {
@@ -77,7 +247,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('🔵 [WORKOUTS] Creating workout with exercises...');
+    console.log('🔵 [WORKOUTS] Creating workout...');
 
     // 1. Criar o workout
     const workoutResult = await sql`
@@ -99,7 +269,7 @@ export async function POST(request: NextRequest) {
       for (const exerciseData of workoutData.exercises) {
         console.log('🔵 [WORKOUTS] Creating exercise:', exerciseData.name);
 
-        // Criar exercício usando sua estrutura
+        // Criar exercício
         const exerciseResult = await sql`
           INSERT INTO exercises (
             workout_id, name, description, video_url,
@@ -153,10 +323,12 @@ export async function POST(request: NextRequest) {
     // 3. Buscar o workout completo criado
     const completeWorkout = await getCompleteWorkout(workout.workout_id);
 
+    console.log('✅ [WORKOUTS] Workout created successfully with ID:', workout.workout_id);
+
     return NextResponse.json({ 
       success: true, 
       data: completeWorkout,
-      message: 'Workout created successfully with exercises'
+      message: 'Workout created successfully'
     }, { status: 201 });
 
   } catch (error) {
@@ -165,180 +337,6 @@ export async function POST(request: NextRequest) {
       { 
         success: false, 
         error: 'Failed to create workout',
-        details: error instanceof Error ? error.message : String(error)
-      },
-      { status: 500 }
-    );
-  }
-}
-
-// Função auxiliar para buscar workout completo
-export async function getCompleteWorkout(workoutId: number) {
-  // Buscar workout com info do programa
-  const workout = await sql`
-    SELECT w.*, p.title as program_title, p.category as program_category
-    FROM workouts w
-    INNER JOIN programs p ON w.program_id = p.program_id
-    WHERE w.workout_id = ${workoutId}
-  ` as unknown as any[];
-
-  if (workout.length === 0) return null;
-
-  // Buscar exercícios com suas séries
-  const exercises = await sql`
-    SELECT 
-      e.*,
-      COALESCE(
-        json_agg(
-          CASE WHEN es.set_id IS NOT NULL THEN
-            json_build_object(
-              'set_id', es.set_id,
-              'set_number', es.set_number,
-              'target_reps', es.target_reps,
-              'actual_reps', es.actual_reps,
-              'target_weight', es.target_weight,
-              'actual_weight', es.actual_weight,
-              'target_duration_seconds', es.target_duration_seconds,
-              'actual_duration_seconds', es.actual_duration_seconds,
-              'distance_meters', es.distance_meters,
-              'rest_seconds', es.rest_seconds,
-              'notes', es.notes,
-              'completed', es.completed,
-              'completed_at', es.completed_at
-            )
-          END ORDER BY es.set_number
-        ) FILTER (WHERE es.set_id IS NOT NULL), 
-        '[]'::json
-      ) as sets
-    FROM exercises e
-    LEFT JOIN exercise_sets es ON e.exercise_id = es.exercise_id
-    WHERE e.workout_id = ${workoutId}
-    GROUP BY e.exercise_id
-    ORDER BY e.order_index
-  ` as unknown as any[];
-
-  return {
-    ...workout[0],
-    exercises: exercises
-  };
-}
-
-export async function GET(request: NextRequest) {
-  try {
-    const userId = request.headers.get('x-user-id');
-    const { searchParams } = new URL(request.url);
-    const programId = searchParams.get('program_id');
-    const includeExercises = searchParams.get('include_exercises') === 'true';
-
-    console.log('🔵 [WORKOUTS] GET request started');
-    console.log('🔵 [WORKOUTS] Headers:', Object.fromEntries(request.headers.entries()));
-    console.log('🔵 [WORKOUTS] Params:', { userId, programId, includeExercises });
-
-    let query: string;
-    let params: any[] = [];
-
-    if (userId && !programId) {
-      // Temporariamente simplificado - mostrar todos os workouts para debug
-      console.log('🔵 [WORKOUTS] Simplified access - showing all workouts for debugging');
-      query = `
-        SELECT 
-          w.*,
-          p.title as program_title,
-          p.category as program_category,
-          p.difficulty_level as program_difficulty,
-          COUNT(DISTINCT e.exercise_id) as exercise_count,
-          COUNT(es.set_id) as total_sets,
-          COUNT(CASE WHEN es.completed = true THEN 1 END) as completed_sets
-        FROM workouts w
-        INNER JOIN programs p ON w.program_id = p.program_id
-        LEFT JOIN exercises e ON w.workout_id = e.workout_id
-        LEFT JOIN exercise_sets es ON e.exercise_id = es.exercise_id
-        WHERE w.program_id = $1
-        GROUP BY w.workout_id, p.title, p.category, p.difficulty_level
-        ORDER BY w.sequence_order ASC
-      `;
-      params = [parseInt(userId || '0')];
-    } else {
-      // Todos os workouts públicos
-      query = `
-        SELECT 
-          w.*,
-          p.title as program_title,
-          p.category as program_category,
-          p.difficulty_level as program_difficulty,
-          COUNT(DISTINCT e.exercise_id) as exercise_count,
-          COUNT(es.set_id) as total_sets
-        FROM workouts w
-        INNER JOIN programs p ON w.program_id = p.program_id
-        LEFT JOIN exercises e ON w.workout_id = e.workout_id
-        LEFT JOIN exercise_sets es ON e.exercise_id = es.exercise_id
-        GROUP BY w.workout_id, p.title, p.category, p.difficulty_level
-        ORDER BY w.sequence_order ASC, w.created_at DESC
-        LIMIT 50
-      `;
-    }
-
-    // Interpolate parameters into the query string for sql.unsafe
-    let interpolatedQuery = query;
-    params.forEach((param, index) => {
-      interpolatedQuery = interpolatedQuery.replace(`$${index + 1}`, typeof param === 'string' ? `'${param}'` : String(param));
-    });
-    
-    console.log('🔵 [WORKOUTS] Executing query:', interpolatedQuery.substring(0, 200) + '...');
-    console.log('🔵 [WORKOUTS] Query params:', params);
-    
-    const result = await sql.unsafe(interpolatedQuery) as unknown as any[];
-    
-    // Garantir que result é sempre um array
-    const resultArray = Array.isArray(result) ? result : [];
-    
-    console.log('🔵 [WORKOUTS] Query result count:', resultArray.length);
-    console.log('🔵 [WORKOUTS] Result type:', typeof result, 'isArray:', Array.isArray(result));
-    
-    if (resultArray.length > 0) {
-      console.log('🔵 [WORKOUTS] Sample results:', resultArray.slice(0, 2).map(r => ({
-        workout_id: r.workout_id,
-        title: r.title,
-        program_title: r.program_title
-      })));
-    }
-
-    // Se solicitado, incluir exercícios completos
-    let workoutsWithExercises = resultArray;
-    if (includeExercises && resultArray.length > 0) {
-      try {
-        workoutsWithExercises = await Promise.all(
-          resultArray.map(async (workout) => {
-            const completeWorkout = await getCompleteWorkout(workout.workout_id);
-            return completeWorkout || workout;
-          })
-        );
-      } catch (exerciseError) {
-        console.error('❌ [WORKOUTS] Error loading exercises:', exerciseError);
-        // Continue with basic workouts if exercise loading fails
-        workoutsWithExercises = resultArray;
-      }
-    }
-
-    console.log('✅ [WORKOUTS] Found workouts:', resultArray.length);
-
-    return NextResponse.json({ 
-      success: true, 
-      data: workoutsWithExercises,
-      meta: {
-        total: resultArray.length,
-        user_specific: !!userId,
-        program_specific: !!programId,
-        includes_exercises: includeExercises
-      }
-    }, { status: 200 });
-
-  } catch (error) {
-    console.error('❌ [WORKOUTS] Error in GET:', error);
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Failed to fetch workouts',
         details: error instanceof Error ? error.message : String(error)
       },
       { status: 500 }

@@ -9,6 +9,7 @@ export interface User {
   password_hash: string;
   date_of_birth?: Date;
   gender?: 'male' | 'female' | 'other';
+  role: 'client' | 'trainer';
   created_at: Date;
   updated_at: Date;
 }
@@ -20,6 +21,7 @@ export interface CreateUserData {
   password: string;
   date_of_birth?: Date;
   gender?: 'male' | 'female' | 'other';
+  role?: 'client' | 'trainer';
 }
 
 export class UserService {
@@ -41,8 +43,8 @@ export class UserService {
       
       // Query usando template literal tag do Neon
       const result = await sql`
-        INSERT INTO users (first_name, last_name, email, password_hash, date_of_birth, gender)
-        VALUES (${userData.first_name}, ${userData.last_name}, ${userData.email}, ${hashedPassword}, ${userData.date_of_birth ?? null}, ${userData.gender ?? null})
+        INSERT INTO users (first_name, last_name, email, password_hash, date_of_birth, gender, role)
+        VALUES (${userData.first_name}, ${userData.last_name}, ${userData.email}, ${hashedPassword}, ${userData.date_of_birth ?? null}, ${userData.gender ?? null}, ${userData.role ?? 'client'})
         RETURNING *
       `;
       console.log('✅ [USER_SERVICE] Query result:', result);

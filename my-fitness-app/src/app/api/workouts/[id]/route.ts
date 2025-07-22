@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { WorkoutService } from '@/lib/services/workout.service';
 import { sql } from '@/lib/database/neon';
+import { getCompleteWorkout } from '@/app/api/workouts/route';
 
 const workoutService = new WorkoutService();
 
@@ -10,30 +11,62 @@ export async function GET(
 ) {
   try {
     const workoutId = parseInt(params.id);
-    
+    const { searchParams } = new URL(request.url);
+    const includeExercises = searchParams.get('include_exercises') !== 'false';
+
     if (isNaN(workoutId)) {
       return NextResponse.json(
         { success: false, error: 'Invalid workout ID' },
         { status: 400 }
       );
     }
-    
-    const result = await sql`
-      SELECT * FROM workouts WHERE workout_id = ${workoutId}
-    `;
-    
-    if (!result || result.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'Workout not found' },
-        { status: 404 }
-      );
+
+    console.log('🔵 [WORKOUT_DETAIL] GET request:', { workoutId, includeExercises });
+
+    if (includeExercises) {
+      const completeWorkout = await getCompleteWorkout(workoutId);
+      
+      if (!completeWorkout) {
+        return NextResponse.json(
+          { success: false, error: 'Workout not found' },
+          { status: 404 }
+        );
+      }
+
+      return NextResponse.json({ 
+        success: true, 
+        data: completeWorkout 
+      }, { status: 200 });
+    } else {
+      // Buscar apenas o workout básico
+      const result = await sql`
+        SELECT w.*, p.title as program_title, p.category as program_category
+        FROM workouts w
+        INNER JOIN programs p ON w.program_id = p.program_id
+        WHERE w.workout_id = ${workoutId}
+      ` as unknown as any[];
+
+      if (result.length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'Workout not found' },
+          { status: 404 }
+        );
+      }
+
+      return NextResponse.json({ 
+        success: true, 
+        data: result[0] 
+      }, { status: 200 });
     }
-    
-    return NextResponse.json({ success: true, data: result[0] }, { status: 200 });
+
   } catch (error) {
-    console.error('Error in GET /api/workouts/[id]:', error);
+    console.error('❌ [WORKOUT_DETAIL] Error in GET:', error);
     return NextResponse.json(
-      { success: false, error: 'Internal server error', details: error },
+      { 
+        success: false, 
+        error: 'Failed to fetch workout',
+        details: error instanceof Error ? error.message : String(error)
+      },
       { status: 500 }
     );
   }

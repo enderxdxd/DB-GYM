@@ -3,6 +3,7 @@
 // ================================
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/database/neon';
+import { getAuthContext } from '@/lib/auth/permissions';
 
 export async function GET(request: NextRequest) {
   console.log('🚀 [PROGRAMS] GET endpoint called');

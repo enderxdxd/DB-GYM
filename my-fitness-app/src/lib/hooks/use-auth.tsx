@@ -1,5 +1,4 @@
-
-// src/lib/hooks/use-auth.tsx 
+// src/lib/hooks/use-auth.tsx (CORREÇÃO FINAL)
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode, useCallback } from 'react';
@@ -12,6 +11,7 @@ interface User {
   email: string;
   date_of_birth?: Date;
   gender?: string;
+  role: 'client' | 'trainer' | 'admin';
   created_at: Date;
   updated_at: Date;
 }
@@ -23,6 +23,13 @@ interface AuthContextType {
   register: (userData: any) => Promise<boolean>;
   logout: () => void;
   refreshToken: () => Promise<boolean>;
+}
+
+// Interface para tipagem das respostas da API
+interface ApiResponse {
+  success: boolean;
+  data?: any;
+  error?: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -52,11 +59,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       console.log('🔵 [AUTH] Fetching user profile...');
-      const response = await apiClient.getProfile();
+      const response: ApiResponse = await apiClient.getProfile();
       
       if (response.success && response.data) {
         console.log('✅ [AUTH] User loaded successfully');
-        setUser(response.data as User);
+        const userData = response.data as User;
+        if (userData.role) {
+          console.log('🔵 [AUTH] User role:', userData.role);
+        }
+        setUser(userData);
       } else {
         console.log('❌ [AUTH] Failed to load user:', response.error);
         // Token pode estar expirado, tentar refresh
@@ -86,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await fetch('/api/auth/refresh-token', {
         method: 'POST',
-        credentials: 'include', // Para incluir cookies
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -98,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         apiClient.setToken(newToken);
         
         // Tentar carregar o usuário novamente
-        const userResponse = await apiClient.getProfile();
+        const userResponse: ApiResponse = await apiClient.getProfile();
         if (userResponse.success && userResponse.data) {
           setUser(userResponse.data as User);
           return true;
@@ -144,12 +155,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('🔵 [AUTH] Attempting login for:', email);
     
     try {
-      const response = await apiClient.login(email, password);
+      const response: ApiResponse = await apiClient.login(email, password);
       
       if (response.success && response.data) {
         const { user: userData, accessToken } = response.data as { user: User; accessToken: string };
         
         console.log('✅ [AUTH] Login successful, setting token and user');
+        if (userData.role) {
+          console.log('🔵 [AUTH] User role:', userData.role);
+        }
         console.log('🔵 [AUTH] Token preview:', accessToken.substring(0, 20) + '...');
         
         // Definir token primeiro
@@ -174,12 +188,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('🔵 [AUTH] Attempting registration for:', userData.email);
     
     try {
-      const response = await apiClient.register(userData);
+      const response: ApiResponse = await apiClient.register(userData);
       
       if (response.success && response.data) {
         const { user: newUser, accessToken } = response.data as { user: User; accessToken: string };
         
         console.log('✅ [AUTH] Registration successful, setting token and user');
+        if (newUser.role) {
+          console.log('🔵 [AUTH] User role:', newUser.role);
+        }
         console.log('🔵 [AUTH] Token preview:', accessToken.substring(0, 20) + '...');
         
         // Definir token primeiro
@@ -239,4 +256,25 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
+}
+
+// Funções utilitárias
+export function isAdmin(user: User | null): boolean {
+  return user?.role === 'admin';
+}
+
+export function isTrainer(user: User | null): boolean {
+  return user?.role === 'trainer';
+}
+
+export function isClient(user: User | null): boolean {
+  return user?.role === 'client';
+}
+
+export function hasTrainerAccess(user: User | null): boolean {
+  return user?.role === 'trainer' || user?.role === 'admin';
+}
+
+export function hasAdminAccess(user: User | null): boolean {
+  return user?.role === 'admin';
 }

@@ -1,4 +1,4 @@
-// src/lib/utils/api-client.ts 
+// src/lib/utils/api-client.ts (CORRIGIDO)
 import { ApiResponse } from '@/lib/types';
 
 class ApiClient {
@@ -6,7 +6,7 @@ class ApiClient {
   private token: string | null = null;
 
   constructor() {
-    this.baseURL = process.env.NEXT_PUBLIC_API_URL || '/api';
+    this.baseURL = process.env.NEXT_PUBLIC_API_URL || '';
     console.log('🔵 [API_CLIENT] Initialized with baseURL:', this.baseURL);
   }
 
@@ -23,7 +23,7 @@ class ApiClient {
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
-  ): Promise<ApiResponse<T>> {
+  ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
     console.log('🔵 [API_CLIENT] Making request to:', url);
     
@@ -34,6 +34,7 @@ class ApiClient {
 
     if (this.token) {
       headers.Authorization = `Bearer ${this.token}`;
+      headers['x-user-id'] = this.getUserIdFromToken() || '';
       console.log('🔵 [API_CLIENT] Added Authorization header');
     }
 
@@ -47,7 +48,7 @@ class ApiClient {
       const response = await fetch(url, {
         ...options,
         headers,
-        credentials: 'include', // Para incluir cookies
+        credentials: 'include',
       });
 
       console.log('🔵 [API_CLIENT] Response status:', response.status);
@@ -58,163 +59,185 @@ class ApiClient {
         console.log('🔵 [API_CLIENT] Response data:', data);
       } catch (jsonError) {
         console.error('❌ [API_CLIENT] Failed to parse JSON:', jsonError);
-        data = { error: 'Invalid server response' };
+        throw new Error('Invalid server response');
       }
 
       if (!response.ok) {
         console.log('❌ [API_CLIENT] Request failed with status:', response.status);
-        return {
-          success: false,
-          error: data.error || `HTTP ${response.status}: ${response.statusText}`,
-        };
+        throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
       }
 
       console.log('✅ [API_CLIENT] Request successful');
-      return {
-        success: true,
-        data,
-      };
+      return data as T;
     } catch (error) {
       console.error('❌ [API_CLIENT] Network error:', error);
-      return {
-        success: false,
-        error: 'Network error - please check your connection',
-      };
+      throw error;
     }
   }
 
-  async get<T>(endpoint: string): Promise<ApiResponse<T>> {
+  private getUserIdFromToken(): string | null {
+    if (!this.token) return null;
+    try {
+      // Decode JWT payload (simple base64 decode)
+      const payload = JSON.parse(atob(this.token.split('.')[1]));
+      return payload.userId?.toString() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async get<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'GET' });
   }
 
-  async post<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+  async post<T>(endpoint: string, data?: any): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
     });
   }
 
-  async put<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+  async put<T>(endpoint: string, data?: any): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined,
     });
   }
 
-  async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
+  async delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
-  // Auth methods
-  async login(email: string, password: string) {
+  // Auth methods with proper typing
+  async login(email: string, password: string): Promise<{
+    success: boolean;
+    data?: {
+      user: any;
+      accessToken: string;
+    };
+    error?: string;
+  }> {
     console.log('🔵 [API_CLIENT] Login attempt for:', email);
-    return this.post('/auth/login', { email, password });
+    try {
+      const response = await this.post<any>('/api/auth/login', { email, password });
+      
+      console.log('🔍 [API_CLIENT] Login response structure:', {
+        success: response.success,
+        has_data: !!response.data,
+        data_keys: response.data ? Object.keys(response.data) : 'no data',
+        has_user: !!response.data?.user,
+        has_accessToken: !!response.data?.accessToken,
+        user_role: response.data?.user?.role
+      });
+      
+      return response;
+    } catch (error) {
+      console.error('❌ [API_CLIENT] Login error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Login failed'
+      };
+    }
   }
 
   async register(userData: any) {
     console.log('🔵 [API_CLIENT] Register attempt for:', userData.email);
-    return this.post('/auth/register', userData);
+    try {
+      return await this.post('/api/auth/register', userData);
+    } catch (error) {
+      console.error('❌ [API_CLIENT] Register error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Registration failed'
+      };
+    }
   }
 
   async logout() {
     console.log('🔵 [API_CLIENT] Logout request');
-    return this.post('/auth/logout');
+    try {
+      return await this.post('/api/auth/logout');
+    } catch (error) {
+      console.error('❌ [API_CLIENT] Logout error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Logout failed'
+      };
+    }
   }
 
   async getProfile() {
     console.log('🔵 [API_CLIENT] Getting user profile');
-    return this.get('/users');
+    try {
+      return await this.get('/api/auth/profile');
+    } catch (error) {
+      console.error('❌ [API_CLIENT] Profile error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Profile fetch failed'
+      };
+    }
   }
 
   async testAuth() {
     console.log('🔵 [API_CLIENT] Testing authentication');
-    return this.get('/test-auth');
+    try {
+      return await this.get('/api/test-auth');
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Auth test failed'
+      };
+    }
   }
 
   // Programs
   async getPrograms(filters?: any) {
     const queryParams = filters ? new URLSearchParams(filters).toString() : '';
-    return this.get(`/programs${queryParams ? `?${queryParams}` : ''}`);
+    return this.get(`/api/programs${queryParams ? `?${queryParams}` : ''}`);
   }
 
   async getProgram(id: number) {
-    return this.get(`/programs/${id}`);
+    return this.get(`/api/programs/${id}`);
   }
 
   async createProgram(data: any) {
-    return this.post('/programs', data);
+    return this.post('/api/programs', data);
   }
 
   async updateProgram(id: number, data: any) {
-    return this.put(`/programs/${id}`, data);
+    return this.put(`/api/programs/${id}`, data);
   }
 
   async deleteProgram(id: number) {
-    return this.delete(`/programs/${id}`);
+    return this.delete(`/api/programs/${id}`);
   }
 
   // Workouts
   async getWorkouts(programId?: number) {
     const queryParams = programId ? `?program_id=${programId}` : '';
-    return this.get(`/workouts${queryParams}`);
+    return this.get(`/api/workouts${queryParams}`);
   }
 
   async getWorkout(id: number) {
-    return this.get(`/workouts/${id}`);
+    return this.get(`/api/workouts/${id}`);
   }
 
   async createWorkout(data: any) {
-    return this.post('/workouts', data);
+    return this.post('/api/workouts', data);
   }
 
-  // Progress
-  async getProgress(filters?: any) {
-    const queryParams = filters ? new URLSearchParams(filters).toString() : '';
-    return this.get(`/progress${queryParams ? `?${queryParams}` : ''}`);
+  // Admin routes
+  async getAdminUsers() {
+    return this.get('/api/admin/users');
   }
 
-  async createProgress(data: any) {
-    return this.post('/progress', data);
+  async updateUserRole(userId: number, role: string) {
+    return this.put(`/api/admin/users/${userId}/role`, { role });
   }
 
-  async getProgressStats() {
-    return this.get('/progress/stats');
-  }
-
-  // Subscriptions
-  async getSubscriptions() {
-    return this.get('/subscriptions');
-  }
-
-  async createSubscription(data: any) {
-    return this.post('/subscriptions', data);
-  }
-
-  async cancelSubscription(subscriptionId: number, reason?: string) {
-    return this.post('/subscriptions/cancel', { subscription_id: subscriptionId, cancel_reason: reason });
-  }
-
-  // Reviews
-  async getReviews(filters?: any) {
-    const queryParams = filters ? new URLSearchParams(filters).toString() : '';
-    return this.get(`/reviews${queryParams ? `?${queryParams}` : ''}`);
-  }
-
-  async createReview(data: any) {
-    return this.post('/reviews', data);
-  }
-
-  // Payments
-  async getPayments() {
-    return this.get('/payments');
-  }
-
-  async createPayment(data: any) {
-    return this.post('/payments', data);
-  }
-
-  async processPayment(paymentId: number, paymentMethod: string) {
-    return this.post('/payments/process', { payment_id: paymentId, payment_method: paymentMethod });
+  async createTrainer(data: any) {
+    return this.post('/api/admin/trainers', data);
   }
 }
 

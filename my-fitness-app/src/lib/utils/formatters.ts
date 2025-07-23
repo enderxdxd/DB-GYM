@@ -1,60 +1,60 @@
-// ================================
 // src/lib/utils/formatters.ts
-// ================================
-import { CurrencyCode, DifficultyLevel, SubscriptionStatus, PaymentStatus } from '@/lib/types';
-
-export function formatCurrency(amount: number, currency: CurrencyCode = 'USD'): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency,
-  }).format(amount);
-}
-
-export function formatDate(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-}
-
-export function formatDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const remainingSeconds = seconds % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m ${remainingSeconds}s`;
-  } else if (minutes > 0) {
-    return `${minutes}m ${remainingSeconds}s`;
-  } else {
-    return `${remainingSeconds}s`;
+export function formatDate(dateString: string): string {
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  } catch (error) {
+    return 'Data inválida';
   }
 }
 
-export function formatWeight(weight: number): string {
-  return `${weight} kg`;
+export function formatDateTime(dateString: string): string {
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (error) {
+    return 'Data inválida';
+  }
 }
 
-export function getDifficultyColor(difficulty: DifficultyLevel): string {
-  const colors = {
-    beginner: 'green',
-    intermediate: 'yellow',
-    advanced: 'red'
-  };
-  return colors[difficulty];
+export function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  }).format(value);
 }
 
-export function getStatusColor(status: SubscriptionStatus | PaymentStatus): string {
-  const colors = {
-    active: 'green',
-    cancelled: 'red',
-    expired: 'gray',
-    pending: 'yellow',
-    completed: 'green',
-    failed: 'red',
-    refunded: 'orange'
-  };
-  return colors[status] || 'gray';
+export function formatDuration(minutes: number): string {
+  if (minutes < 60) {
+    return `${minutes}min`;
+  }
+  
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  
+  if (remainingMinutes === 0) {
+    return `${hours}h`;
+  }
+  
+  return `${hours}h ${remainingMinutes}min`;
+}
+
+export function capitalizeFirst(str: string): string {
+  if (!str) return '';
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+}
+
+export function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength) + '...';
 }

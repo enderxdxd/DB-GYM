@@ -45,18 +45,23 @@ interface CreateTrainerResponse {
 }
 
 const specializations = [
-  'Musculação',
+  'Bodybuilding',
   'Crossfit',
   'Yoga',
   'Pilates',
-  'Cardio',
-  'Funcional',
-  'Natação',
-  'Corrida',
-  'Lutas',
-  'Dança',
-  'Fisioterapia',
-  'Nutrição Esportiva'
+  'Swimming',
+  'Dance',
+  'Martial Arts',
+  'Functional Training',
+  'Running',
+  'Cycling',
+  'Group Training',
+  'Rehabilitation',
+  'Sports Nutrition',
+  'Bodybuilding',
+  'Senior Fitness',
+  'Prenatal Training',
+  'Other'
 ];
 
 export function CreateTrainerModal({ open, onOpenChange, onSuccess }: CreateTrainerModalProps) {
@@ -87,13 +92,13 @@ export function CreateTrainerModal({ open, onOpenChange, onSuccess }: CreateTrai
     setLoading(true);
 
     try {
-      // Validação básica
+      // Basic validation
       if (!formData.first_name || !formData.last_name || !formData.email || !formData.password) {
-        throw new Error('Preencha todos os campos obrigatórios');
+        throw new Error('Please fill in all required fields');
       }
 
       if (formData.password.length < 6) {
-        throw new Error('A senha deve ter pelo menos 6 caracteres');
+        throw new Error('Password must be at least 6 characters long');
       }
 
       const token = localStorage.getItem('accessToken');
@@ -101,7 +106,7 @@ export function CreateTrainerModal({ open, onOpenChange, onSuccess }: CreateTrai
         apiClient.setToken(token);
       }
 
-      // Chamada com tipagem correta
+      // Function to handle form submission
       const response = await apiClient.createTrainer(formData) as CreateTrainerResponse;
 
       if (response.success) {
@@ -152,7 +157,7 @@ export function CreateTrainerModal({ open, onOpenChange, onSuccess }: CreateTrai
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Criar Novo Trainer</DialogTitle>
+          <DialogTitle>Create New Trainer</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -162,10 +167,10 @@ export function CreateTrainerModal({ open, onOpenChange, onSuccess }: CreateTrai
             </div>
           )}
 
-          {/* Informações Pessoais */}
+          {/* Personal Information */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="first_name">Nome *</Label>
+              <Label htmlFor="first_name">First Name *</Label>
               <Input
                 id="first_name"
                 type="text"
@@ -176,7 +181,7 @@ export function CreateTrainerModal({ open, onOpenChange, onSuccess }: CreateTrai
               />
             </div>
             <div>
-              <Label htmlFor="last_name">Sobrenome *</Label>
+              <Label htmlFor="last_name">Last Name *</Label>
               <Input
                 id="last_name"
                 type="text"
@@ -201,7 +206,7 @@ export function CreateTrainerModal({ open, onOpenChange, onSuccess }: CreateTrai
           </div>
 
           <div>
-            <Label htmlFor="password">Senha *</Label>
+            <Label htmlFor="password">Password *</Label>
             <Input
               id="password"
               type="password"
@@ -212,24 +217,24 @@ export function CreateTrainerModal({ open, onOpenChange, onSuccess }: CreateTrai
               disabled={loading}
             />
             <p className="text-sm text-muted-foreground mt-1">
-              Mínimo de 6 caracteres
+              Minimum 6 characters
             </p>
           </div>
 
-          {/* Informações Profissionais */}
+          {/* Professional Information */}
           <div className="border-t pt-6">
-            <h3 className="text-lg font-medium mb-4">Informações Profissionais</h3>
+            <h3 className="text-lg font-medium mb-4">Professional Information</h3>
             
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="specialization">Especialização</Label>
+                <Label htmlFor="specialization">Specialization</Label>
                 <Select
                   value={formData.specialization}
                   onValueChange={(value) => handleChange('specialization', value)}
                   disabled={loading}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma especialização" />
+                    <SelectValue placeholder="Select a specialization" />
                   </SelectTrigger>
                   <SelectContent>
                     {specializations.map((spec) => (
@@ -242,7 +247,7 @@ export function CreateTrainerModal({ open, onOpenChange, onSuccess }: CreateTrai
               </div>
 
               <div>
-                <Label htmlFor="experience_years">Anos de Experiência</Label>
+                <Label htmlFor="experience_years">Years of Experience</Label>
                 <Input
                   id="experience_years"
                   type="number"
@@ -256,19 +261,19 @@ export function CreateTrainerModal({ open, onOpenChange, onSuccess }: CreateTrai
             </div>
 
             <div>
-              <Label htmlFor="certification">Certificações</Label>
+              <Label htmlFor="certification">Certifications</Label>
               <Input
                 id="certification"
                 type="text"
                 value={formData.certification}
                 onChange={(e) => handleChange('certification', e.target.value)}
-                placeholder="Ex: CREF, Personal Trainer Certification..."
+                placeholder="E.g.: CREF, Personal Trainer Certification..."
                 disabled={loading}
               />
             </div>
 
             <div>
-              <Label htmlFor="hourly_rate">Valor por Hora (R$)</Label>
+              <Label htmlFor="hourly_rate">Hourly Rate ($)</Label>
               <Input
                 id="hourly_rate"
                 type="number"
@@ -281,12 +286,12 @@ export function CreateTrainerModal({ open, onOpenChange, onSuccess }: CreateTrai
             </div>
 
             <div>
-              <Label htmlFor="bio">Biografia</Label>
+              <Label htmlFor="bio">Biography</Label>
               <Textarea
                 id="bio"
                 value={formData.bio}
                 onChange={(e) => handleChange('bio', e.target.value)}
-                placeholder="Conte um pouco sobre a experiência e metodologia do trainer..."
+                placeholder="Tell us about the trainer's experience and methodology..."
                 rows={4}
                 disabled={loading}
               />
@@ -300,16 +305,16 @@ export function CreateTrainerModal({ open, onOpenChange, onSuccess }: CreateTrai
               onClick={handleCancel}
               disabled={loading}
             >
-              Cancelar
+              Cancel
             </Button>
             <Button type="submit" disabled={loading}>
               {loading ? (
                 <>
                   <LoadingSpinner className="w-4 h-4 mr-2" />
-                  Criando...
+                  Creating...
                 </>
               ) : (
-                'Criar Trainer'
+                'Create Trainer'
               )}
             </Button>
           </DialogFooter>

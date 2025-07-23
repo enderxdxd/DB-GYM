@@ -53,7 +53,7 @@ const roleColors = {
 const roleLabels = {
   admin: 'Admin',
   trainer: 'Trainer',
-  client: 'Cliente'
+  client: 'Client'
 };
 
 export function UserRoleManager({ users, onRefresh }: UserRoleManagerProps) {
@@ -88,12 +88,12 @@ export function UserRoleManager({ users, onRefresh }: UserRoleManagerProps) {
         onRefresh();
       } else {
         console.error('Failed to update role:', response.error);
-        alert(`Erro ao atualizar role: ${response.error || 'Erro desconhecido'}`);
+        alert(`Error updating role: ${response.error || 'Unknown error'}`);
       }
     } catch (error: any) {
       console.error('Error updating role:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-      alert(`Erro ao atualizar role: ${errorMessage}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Error updating role: ${errorMessage}`);
     } finally {
       setLoadingUsers(prev => {
         const newSet = new Set(Array.from(prev));
@@ -105,11 +105,11 @@ export function UserRoleManager({ users, onRefresh }: UserRoleManagerProps) {
 
   return (
     <div className="space-y-4">
-      {/* Filtros */}
+      {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex-1">
           <Input
-            placeholder="Buscar por nome ou email..."
+            placeholder="Search by name or email..."
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
@@ -117,34 +117,34 @@ export function UserRoleManager({ users, onRefresh }: UserRoleManagerProps) {
         <div className="w-full sm:w-48">
           <Select value={roleFilter} onValueChange={setRoleFilter}>
             <SelectTrigger>
-              <SelectValue placeholder="Filtrar por role" />
+              <SelectValue placeholder="Filter by role" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos os Roles</SelectItem>
+              <SelectItem value="all">All Roles</SelectItem>
               <SelectItem value="admin">Admins</SelectItem>
               <SelectItem value="trainer">Trainers</SelectItem>
-              <SelectItem value="client">Clientes</SelectItem>
+              <SelectItem value="client">Clients</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      {/* Estatísticas dos filtros */}
+      {/* Filter statistics */}
       <div className="text-sm text-muted-foreground">
-        Mostrando {filteredUsers.length} de {users.length} usuários
+        Showing {filteredUsers.length} of {users.length} users
       </div>
 
-      {/* Tabela */}
+      {/* Table */}
       <div className="border rounded-lg overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Usuário</TableHead>
+              <TableHead>User</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Role Atual</TableHead>
-              <TableHead>Informações</TableHead>
-              <TableHead>Criado em</TableHead>
-              <TableHead>Ações</TableHead>
+              <TableHead>Current Role</TableHead>
+              <TableHead>Information</TableHead>
+              <TableHead>Created at</TableHead>
+              <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -180,7 +180,7 @@ export function UserRoleManager({ users, onRefresh }: UserRoleManagerProps) {
                           variant={user.is_verified ? "default" : "secondary"}
                           className="text-xs"
                         >
-                          {user.is_verified ? "Verificado" : "Não Verificado"}
+                          {user.is_verified ? "Verified" : "Not Verified"}
                         </Badge>
                       </div>
                     )}
@@ -190,10 +190,10 @@ export function UserRoleManager({ users, onRefresh }: UserRoleManagerProps) {
                     {user.role === 'trainer' && (
                       <div className="text-sm space-y-1">
                         {user.experience_years !== undefined && (
-                          <div>{user.experience_years} anos de experiência</div>
+                          <div>{user.experience_years} years of experience</div>
                         )}
                         {user.hourly_rate && (
-                          <div>R$ {user.hourly_rate}/hora</div>
+                          <div>${user.hourly_rate}/hour</div>
                         )}
                         {user.certification && (
                           <div className="text-muted-foreground">
@@ -221,7 +221,7 @@ export function UserRoleManager({ users, onRefresh }: UserRoleManagerProps) {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="client">Cliente</SelectItem>
+                          <SelectItem value="client">Client</SelectItem>
                           <SelectItem value="trainer">Trainer</SelectItem>
                           <SelectItem value="admin">Admin</SelectItem>
                         </SelectContent>
@@ -241,7 +241,7 @@ export function UserRoleManager({ users, onRefresh }: UserRoleManagerProps) {
 
       {filteredUsers.length === 0 && (
         <div className="text-center py-8 text-muted-foreground">
-          Nenhum usuário encontrado com os filtros aplicados.
+          No users found with the applied filters.
         </div>
       )}
     </div>

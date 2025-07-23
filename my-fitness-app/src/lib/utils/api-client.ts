@@ -1,5 +1,12 @@
-// src/lib/utils/api-client.ts (CORRIGIDO)
-import { ApiResponse } from '@/lib/types';
+// src/lib/utils/api-client.ts (CORRIGIDO COM TIPAGEM)
+
+// Interface base para todas as respostas da API
+interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
 
 class ApiClient {
   private baseURL: string;
@@ -23,7 +30,7 @@ class ApiClient {
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
-  ): Promise<T> {
+  ): Promise<ApiResponse<T>> {
     const url = `${this.baseURL}${endpoint}`;
     console.log('🔵 [API_CLIENT] Making request to:', url);
     
@@ -53,25 +60,44 @@ class ApiClient {
 
       console.log('🔵 [API_CLIENT] Response status:', response.status);
 
-      let data;
+      let data: any;
       try {
         data = await response.json();
         console.log('🔵 [API_CLIENT] Response data:', data);
       } catch (jsonError) {
         console.error('❌ [API_CLIENT] Failed to parse JSON:', jsonError);
-        throw new Error('Invalid server response');
+        return {
+          success: false,
+          error: 'Invalid server response'
+        };
       }
 
       if (!response.ok) {
         console.log('❌ [API_CLIENT] Request failed with status:', response.status);
-        throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
+        return {
+          success: false,
+          error: data.error || `HTTP ${response.status}: ${response.statusText}`
+        };
       }
 
       console.log('✅ [API_CLIENT] Request successful');
-      return data as T;
+      
+      // Se a resposta já tem a estrutura ApiResponse, retornar como está
+      if (typeof data === 'object' && data !== null && 'success' in data) {
+        return data as ApiResponse<T>;
+      }
+      
+      // Caso contrário, envolver em uma resposta bem-sucedida
+      return {
+        success: true,
+        data: data as T
+      };
     } catch (error) {
       console.error('❌ [API_CLIENT] Network error:', error);
-      throw error;
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Network error occurred'
+      };
     }
   }
 
@@ -86,40 +112,40 @@ class ApiClient {
     }
   }
 
-  async get<T>(endpoint: string): Promise<T> {
+  // Métodos HTTP básicos
+  async get<T>(endpoint: string): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, { method: 'GET' });
   }
 
-  async post<T>(endpoint: string, data?: any): Promise<T> {
+  async post<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
     });
   }
 
-  async put<T>(endpoint: string, data?: any): Promise<T> {
+  async put<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined,
     });
   }
 
-  async delete<T>(endpoint: string): Promise<T> {
+  async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
-  // Auth methods with proper typing
-  async login(email: string, password: string): Promise<{
-    success: boolean;
-    data?: {
-      user: any;
-      accessToken: string;
-    };
-    error?: string;
-  }> {
+  // Auth methods com tipagem específica
+  async login(email: string, password: string): Promise<ApiResponse<{
+    user: any;
+    accessToken: string;
+  }>> {
     console.log('🔵 [API_CLIENT] Login attempt for:', email);
     try {
-      const response = await this.post<any>('/api/auth/login', { email, password });
+      const response = await this.post<{
+        user: any;
+        accessToken: string;
+      }>('/api/auth/login', { email, password });
       
       console.log('🔍 [API_CLIENT] Login response structure:', {
         success: response.success,
@@ -140,10 +166,16 @@ class ApiClient {
     }
   }
 
-  async register(userData: any) {
+  async register(userData: any): Promise<ApiResponse<{
+    user: any;
+    accessToken: string;
+  }>> {
     console.log('🔵 [API_CLIENT] Register attempt for:', userData.email);
     try {
-      return await this.post('/api/auth/register', userData);
+      return await this.post<{
+        user: any;
+        accessToken: string;
+      }>('/api/auth/register', userData);
     } catch (error) {
       console.error('❌ [API_CLIENT] Register error:', error);
       return {
@@ -153,10 +185,10 @@ class ApiClient {
     }
   }
 
-  async logout() {
+  async logout(): Promise<ApiResponse<any>> {
     console.log('🔵 [API_CLIENT] Logout request');
     try {
-      return await this.post('/api/auth/logout');
+      return await this.post<any>('/api/auth/logout');
     } catch (error) {
       console.error('❌ [API_CLIENT] Logout error:', error);
       return {
@@ -166,10 +198,10 @@ class ApiClient {
     }
   }
 
-  async getProfile() {
+  async getProfile(): Promise<ApiResponse<any>> {
     console.log('🔵 [API_CLIENT] Getting user profile');
     try {
-      return await this.get('/api/auth/profile');
+      return await this.get<any>('/api/auth/profile');
     } catch (error) {
       console.error('❌ [API_CLIENT] Profile error:', error);
       return {
@@ -179,10 +211,10 @@ class ApiClient {
     }
   }
 
-  async testAuth() {
+  async testAuth(): Promise<ApiResponse<any>> {
     console.log('🔵 [API_CLIENT] Testing authentication');
     try {
-      return await this.get('/api/test-auth');
+      return await this.get<any>('/api/test-auth');
     } catch (error) {
       return {
         success: false,
@@ -192,53 +224,143 @@ class ApiClient {
   }
 
   // Programs
-  async getPrograms(filters?: any) {
+  async getPrograms(filters?: any): Promise<ApiResponse<any[]>> {
     const queryParams = filters ? new URLSearchParams(filters).toString() : '';
-    return this.get(`/api/programs${queryParams ? `?${queryParams}` : ''}`);
+    return this.get<any[]>(`/api/programs${queryParams ? `?${queryParams}` : ''}`);
   }
 
-  async getProgram(id: number) {
-    return this.get(`/api/programs/${id}`);
+  async getProgram(id: number): Promise<ApiResponse<any>> {
+    return this.get<any>(`/api/programs/${id}`);
   }
 
-  async createProgram(data: any) {
-    return this.post('/api/programs', data);
+  async createProgram(data: any): Promise<ApiResponse<any>> {
+    return this.post<any>('/api/programs', data);
   }
 
-  async updateProgram(id: number, data: any) {
-    return this.put(`/api/programs/${id}`, data);
+  async updateProgram(id: number, data: any): Promise<ApiResponse<any>> {
+    return this.put<any>(`/api/programs/${id}`, data);
   }
 
-  async deleteProgram(id: number) {
-    return this.delete(`/api/programs/${id}`);
+  async deleteProgram(id: number): Promise<ApiResponse<any>> {
+    return this.delete<any>(`/api/programs/${id}`);
   }
 
   // Workouts
-  async getWorkouts(programId?: number) {
+  async getWorkouts(programId?: number): Promise<ApiResponse<any[]>> {
     const queryParams = programId ? `?program_id=${programId}` : '';
-    return this.get(`/api/workouts${queryParams}`);
+    return this.get<any[]>(`/api/workouts${queryParams}`);
   }
 
-  async getWorkout(id: number) {
-    return this.get(`/api/workouts/${id}`);
+  async getWorkout(id: number): Promise<ApiResponse<any>> {
+    return this.get<any>(`/api/workouts/${id}`);
   }
 
-  async createWorkout(data: any) {
-    return this.post('/api/workouts', data);
+  async createWorkout(data: any): Promise<ApiResponse<any>> {
+    return this.post<any>('/api/workouts', data);
+  }
+
+  async updateWorkout(id: number, data: any): Promise<ApiResponse<any>> {
+    return this.put<any>(`/api/workouts/${id}`, data);
+  }
+
+  async deleteWorkout(id: number): Promise<ApiResponse<any>> {
+    return this.delete<any>(`/api/workouts/${id}`);
   }
 
   // Admin routes
-  async getAdminUsers() {
-    return this.get('/api/admin/users');
+  async getAdminUsers(): Promise<ApiResponse<any[]>> {
+    return this.get<any[]>('/api/admin/users');
   }
 
-  async updateUserRole(userId: number, role: string) {
-    return this.put(`/api/admin/users/${userId}/role`, { role });
+  async updateUserRole(userId: number, role: string): Promise<ApiResponse<any>> {
+    return this.put<any>(`/api/admin/users/${userId}/role`, { role });
   }
 
-  async createTrainer(data: any) {
-    return this.post('/api/admin/trainers', data);
+  async createTrainer(data: any): Promise<ApiResponse<any>> {
+    return this.post<any>('/api/admin/trainers', data);
+  }
+
+  // Subscriptions
+  async getSubscriptions(): Promise<ApiResponse<any[]>> {
+    return this.get<any[]>('/api/subscriptions');
+  }
+
+  async createSubscription(data: any): Promise<ApiResponse<any>> {
+    return this.post<any>('/api/subscriptions', data);
+  }
+
+  async updateSubscription(id: number, data: any): Promise<ApiResponse<any>> {
+    return this.put<any>(`/api/subscriptions/${id}`, data);
+  }
+
+  async deleteSubscription(id: number): Promise<ApiResponse<any>> {
+    return this.delete<any>(`/api/subscriptions/${id}`);
+  }
+
+  // Progress and Stats
+  async getProgressStats(): Promise<ApiResponse<any>> {
+    return this.get<any>('/api/progress/stats');
+  }
+
+  async getProgress(userId?: number): Promise<ApiResponse<any[]>> {
+    const endpoint = userId ? `/api/progress?userId=${userId}` : '/api/progress';
+    return this.get<any[]>(endpoint);
+  }
+
+  async createProgress(data: any): Promise<ApiResponse<any>> {
+    return this.post<any>('/api/progress', data);
+  }
+
+  async getWeeklyProgress(weeks: number = 12): Promise<ApiResponse<any[]>> {
+    return this.get<any[]>(`/api/progress/weekly?weeks=${weeks}`);
+  }
+
+  // Analytics endpoints
+  async getAnalyticsCategories(): Promise<ApiResponse<any[]>> {
+    return this.get<any[]>('/api/analytics/categories');
+  }
+
+  async getAnalyticsTrainersMostUsers(limit: number = 10): Promise<ApiResponse<any[]>> {
+    return this.get<any[]>(`/api/analytics/trainers/most-users?limit=${limit}`);
+  }
+
+  async getAnalyticsTrainersDiverse(limit: number = 10): Promise<ApiResponse<any[]>> {
+    return this.get<any[]>(`/api/analytics/trainers/diverse?limit=${limit}`);
+  }
+
+  async getAnalyticsAverageProgramsPerTrainer(category: string = 'Yoga'): Promise<ApiResponse<any>> {
+    return this.get<any>(`/api/analytics/programs/average-per-trainer?category=${category}`);
+  }
+
+  async getAnalyticsUsersCompletedPrograms(options: {
+    programId?: number,
+    multiple?: boolean,
+    lastYear?: boolean
+  } = {}): Promise<ApiResponse<any[]>> {
+    const params = new URLSearchParams();
+    if (options.programId) params.append('programId', options.programId.toString());
+    if (options.multiple) params.append('multiple', 'true');
+    if (options.lastYear) params.append('lastYear', 'true');
+    
+    return this.get<any[]>(`/api/analytics/users/completed-programs?${params.toString()}`);
+  }
+
+  async getAnalyticsWorkoutCompletionRates(options: {
+    programTitle?: string,
+    lowest?: boolean,
+    skipped?: boolean,
+    limit?: number
+  } = {}): Promise<ApiResponse<any[]>> {
+    const params = new URLSearchParams();
+    if (options.programTitle) params.append('programTitle', options.programTitle);
+    if (options.lowest) params.append('lowest', 'true');
+    if (options.skipped) params.append('skipped', 'true');
+    if (options.limit) params.append('limit', options.limit.toString());
+    
+    return this.get<any[]>(`/api/analytics/workouts/completion-rates?${params.toString()}`);
   }
 }
 
+
 export const apiClient = new ApiClient();
+export type { ApiResponse };

@@ -23,11 +23,12 @@ import {
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home, roles: ['client', 'trainer', 'admin'] },
-  { name: 'Programas', href: '/programs', icon: Dumbbell, roles: ['client', 'trainer', 'admin'] },
+  { name: 'Programs', href: '/programs', icon: Dumbbell, roles: ['client', 'trainer', 'admin'] },
   { name: 'Workouts', href: '/workouts', icon: Calendar, roles: ['trainer', 'admin', 'client'] },
-  { name: 'Progresso', href: '/progress', icon: BarChart2, roles: ['client', 'trainer', 'admin'] },
-  { name: 'Nutrição', href: '/nutrition', icon: Activity, roles: ['client', 'trainer', 'admin'] },
-  { name: 'Clientes', href: '/clients', icon: UsersIcon, roles: ['trainer', 'admin'] },
+  { name: 'Progress', href: '/progress', icon: BarChart2, roles: ['client', 'trainer', 'admin'] },
+  { name: 'Nutrition', href: '/nutrition', icon: Activity, roles: ['client', 'trainer', 'admin'] },
+  { name: 'Analytics', href: '/analytics', icon: BarChart2, roles: ['client', 'trainer', 'admin'] },
+  { name: 'Clients', href: '/clients', icon: UsersIcon, roles: ['trainer', 'admin'] },
   { name: 'Admin', href: '/admin', icon: Shield, roles: ['admin'] },
 ];
 
@@ -61,11 +62,11 @@ export function Sidebar() {
   const getRoleLabel = (role: string) => {
     switch (role) {
       case 'admin':
-        return 'Administrador';
+        return 'Admin';
       case 'trainer':
         return 'Trainer';
       case 'client':
-        return 'Cliente';
+        return 'Client';
       default:
         return role;
     }

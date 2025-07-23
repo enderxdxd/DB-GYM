@@ -1,4 +1,3 @@
-// src/lib/hooks/use-auth.tsx (CORREÇÃO FINAL)
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode, useCallback } from 'react';
@@ -26,31 +25,57 @@ interface AuthContextType {
 }
 
 // Interface para tipagem das respostas da API
-interface ApiResponse {
+interface ApiResponse<T = any> {
   success: boolean;
-  data?: any;
+  data?: T;
   error?: string;
+  message?: string;
+}
+
+interface AuthResponse {
+  user: User;
+  accessToken: string;
+}
+
+interface RefreshTokenResponse {
+  accessToken: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Variável global para evitar múltiplas inicializações
+let authInitialized = false;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [initialized, setInitialized] = useState(false);
 
   // Função para carregar o usuário baseado no token
   const loadUser = useCallback(async (skipTokenCheck = false) => {
+    // Evitar múltiplas inicializações simultâneas
+    if (authInitialized && !skipTokenCheck) {
+      console.log('ℹ️ [AUTH] Already initialized, skipping...');
+      setLoading(false);
+      return;
+    }
+
     console.log('🔵 [AUTH] Loading user... skipTokenCheck:', skipTokenCheck);
     
     try {
+      // Verificar se estamos no navegador
+      if (typeof window === 'undefined') {
+        console.log('ℹ️ [AUTH] Server-side rendering, skipping token check');
+        setLoading(false);
+        return;
+      }
+
       if (!skipTokenCheck) {
         const token = localStorage.getItem('accessToken');
         
         if (!token) {
           console.log('ℹ️ [AUTH] No token found');
           setLoading(false);
-          setInitialized(true);
+          authInitialized = true;
           return;
         }
 
@@ -59,11 +84,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       console.log('🔵 [AUTH] Fetching user profile...');
-      const response: ApiResponse = await apiClient.getProfile();
+      const response: ApiResponse<User> = await apiClient.getProfile();
       
       if (response.success && response.data) {
         console.log('✅ [AUTH] User loaded successfully');
-        const userData = response.data as User;
+        const userData = response.data;
         if (userData.role) {
           console.log('🔵 [AUTH] User role:', userData.role);
         }
@@ -74,19 +99,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const refreshSuccess = await refreshTokenInternal();
         if (!refreshSuccess) {
           console.log('🔵 [AUTH] Refresh failed, clearing tokens');
-          localStorage.removeItem('accessToken');
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('accessToken');
+          }
           apiClient.clearToken();
           setUser(null);
         }
       }
     } catch (error) {
       console.error('❌ [AUTH] Error loading user:', error);
-      localStorage.removeItem('accessToken');
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('accessToken');
+      }
       apiClient.clearToken();
       setUser(null);
     } finally {
       setLoading(false);
-      setInitialized(true);
+      authInitialized = true;
     }
   }, []);
 
@@ -101,17 +130,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data: RefreshTokenResponse = await response.json();
         const newToken = data.accessToken;
         
         console.log('✅ [AUTH] Token refreshed successfully');
-        localStorage.setItem('accessToken', newToken);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('accessToken', newToken);
+        }
         apiClient.setToken(newToken);
         
         // Tentar carregar o usuário novamente
-        const userResponse: ApiResponse = await apiClient.getProfile();
+        const userResponse: ApiResponse<User> = await apiClient.getProfile();
         if (userResponse.success && userResponse.data) {
-          setUser(userResponse.data as User);
+          setUser(userResponse.data);
           return true;
         }
       }
@@ -126,14 +157,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Inicialização - apenas uma vez quando o componente monta
   useEffect(() => {
-    if (!initialized) {
-      console.log('🔵 [AUTH] AuthProvider initializing...');
+    console.log('🔵 [AUTH] AuthProvider mounting, initialized:', authInitialized);
+    
+    // Verificar se já foi inicializado
+    if (!authInitialized) {
+      console.log('🔵 [AUTH] First initialization...');
       loadUser();
+    } else {
+      console.log('🔵 [AUTH] Already initialized, setting loading to false');
+      setLoading(false);
     }
-  }, [initialized, loadUser]);
+
+    // Cleanup function para reset quando o componente desmonta
+    return () => {
+      console.log('🔵 [AUTH] AuthProvider unmounting');
+    };
+  }, [loadUser]);
 
   // Configurar listeners para mudanças no localStorage (multi-tab)
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     const handleStorage = (event: StorageEvent) => {
       if (event.key === 'accessToken') {
         console.log('🔵 [AUTH] Token changed in localStorage from another tab');
@@ -155,10 +199,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('🔵 [AUTH] Attempting login for:', email);
     
     try {
-      const response: ApiResponse = await apiClient.login(email, password);
+      const response: ApiResponse<AuthResponse> = await apiClient.login(email, password);
       
       if (response.success && response.data) {
-        const { user: userData, accessToken } = response.data as { user: User; accessToken: string };
+        const { user: userData, accessToken } = response.data;
         
         console.log('✅ [AUTH] Login successful, setting token and user');
         if (userData.role) {
@@ -167,7 +211,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('🔵 [AUTH] Token preview:', accessToken.substring(0, 20) + '...');
         
         // Definir token primeiro
-        localStorage.setItem('accessToken', accessToken);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('accessToken', accessToken);
+        }
         apiClient.setToken(accessToken);
         
         // Depois definir usuário
@@ -188,10 +234,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('🔵 [AUTH] Attempting registration for:', userData.email);
     
     try {
-      const response: ApiResponse = await apiClient.register(userData);
+      const response: ApiResponse<AuthResponse> = await apiClient.register(userData);
       
       if (response.success && response.data) {
-        const { user: newUser, accessToken } = response.data as { user: User; accessToken: string };
+        const { user: newUser, accessToken } = response.data;
         
         console.log('✅ [AUTH] Registration successful, setting token and user');
         if (newUser.role) {
@@ -200,7 +246,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('🔵 [AUTH] Token preview:', accessToken.substring(0, 20) + '...');
         
         // Definir token primeiro
-        localStorage.setItem('accessToken', accessToken);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('accessToken', accessToken);
+        }
         apiClient.setToken(accessToken);
         
         // Depois definir usuário
@@ -220,9 +268,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     console.log('🔵 [AUTH] Logging out...');
     
-    localStorage.removeItem('accessToken');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('accessToken');
+    }
     apiClient.clearToken();
     setUser(null);
+    
+    // Reset da flag de inicialização para permitir nova inicialização após logout
+    authInitialized = false;
     
     // Chamar endpoint de logout para limpar cookies
     apiClient.logout().catch(error => {

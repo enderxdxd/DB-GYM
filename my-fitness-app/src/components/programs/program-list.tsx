@@ -427,7 +427,7 @@ export function ProgramList({ filters }: ProgramListProps) {
               </div>
 
               {/* ✅ Botões de ação */}
-              <div className="space-y-2">
+              <div className="space-y-3 mt-4">
                 <Link href={`/programs/${program.program_id}`}>
                   <Button variant="outline" className="w-full">
                     View Details
@@ -437,8 +437,8 @@ export function ProgramList({ filters }: ProgramListProps) {
                 {user ? (
                   program.is_subscribed ? (
                     <Button 
-                      variant="danger" 
-                      className="w-full"
+                      variant="outline"
+                      className="w-full border-red-500 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-600 transition-colors"
                       onClick={() => handleUnjoinProgram(program.program_id)}
                       disabled={loadingSubscriptions[program.program_id]}
                     >
@@ -453,7 +453,7 @@ export function ProgramList({ filters }: ProgramListProps) {
                     </Button>
                   ) : (
                     <Button 
-                      className="w-full"
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
                       onClick={() => handleJoinProgram(program.program_id)}
                       disabled={loadingSubscriptions[program.program_id]}
                     >
@@ -469,7 +469,7 @@ export function ProgramList({ filters }: ProgramListProps) {
                   )
                 ) : (
                   <Button 
-                    className="w-full"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
                     onClick={() => window.location.href = '/login'}
                   >
                     Login to Join

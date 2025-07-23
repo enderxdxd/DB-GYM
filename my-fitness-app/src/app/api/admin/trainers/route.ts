@@ -1,13 +1,12 @@
-// src/app/api/admin/trainers/route.ts
+// src/app/api/admin/trainers/route.ts (CORRIGIDO)
 import { NextRequest, NextResponse } from 'next/server';
 import { AdminService } from '@/lib/services/admin.service';
 import { getExtendedAuthContext, requireAdminRole, ADMIN_PERMISSION_DENIED } from '@/lib/auth/admin-permissions';
 
 export async function POST(request: NextRequest) {
-  console.log('🔵 [ADMIN_API] Creating trainer profile...');
+  console.log('🔵 [ADMIN_API] Creating trainer...');
   
   try {
-    // Verificar autenticação admin
     const userId = request.headers.get('x-user-id');
     if (!userId) {
       return NextResponse.json({
@@ -22,62 +21,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(ADMIN_PERMISSION_DENIED, { status: 403 });
     }
 
-    const body = await request.json();
-    const {
-      first_name,
-      last_name,
-      email,
-      password,
-      specialization,
-      experience_years,
-      certification,
-      bio,
-      hourly_rate
-    } = body;
+    const trainerData = await request.json();
 
     // Validação básica
-    if (!first_name || !last_name || !email || !password) {
+    if (!trainerData.first_name || !trainerData.last_name || !trainerData.email || !trainerData.password) {
       return NextResponse.json({
         success: false,
-        error: 'Required fields missing: first_name, last_name, email, password',
+        error: 'Missing required fields: first_name, last_name, email, password',
         code: 'VALIDATION_ERROR'
       }, { status: 400 });
     }
 
     const adminService = new AdminService();
-    const trainerProfile = await adminService.createTrainerProfile(
-      authContext!.user.user_id,
-      {
-        first_name,
-        last_name,
-        email,
-        password,
-        specialization,
-        experience_years,
-        certification,
-        bio,
-        hourly_rate
-      }
+    const newTrainer = await adminService.createTrainerProfile(
+      parseInt(userId),
+      trainerData
     );
 
-    console.log('✅ [ADMIN_API] Trainer profile created successfully');
+    console.log('✅ [ADMIN_API] Trainer created successfully');
 
     return NextResponse.json({
       success: true,
-      message: 'Trainer profile created successfully',
-      data: {
-        trainer_id: trainerProfile.trainer_id,
-        user_id: trainerProfile.user_id,
-        email: trainerProfile.email,
-        full_name: `${trainerProfile.first_name} ${trainerProfile.last_name}`,
-        specialization: trainerProfile.specialization
-      }
-    }, { status: 201 });
+      data: newTrainer,
+      message: 'Trainer profile created successfully'
+    });
 
   } catch (error: any) {
-    console.error('❌ [ADMIN_API] Error creating trainer profile:', error);
+    console.error('❌ [ADMIN_API] Error creating trainer:', error);
 
-    if (error.message.includes('duplicate key') || error.message.includes('unique constraint')) {
+    if (error.message.includes('already exists')) {
       return NextResponse.json({
         success: false,
         error: 'Email already exists',
@@ -114,12 +86,11 @@ export async function GET(request: NextRequest) {
     }
 
     const adminService = new AdminService();
-    const users = await adminService.getAllUsers();
+    
+    // Usar o método específico para buscar trainers
+    const trainers = await adminService.getAllTrainers();
 
-    // Filtrar apenas trainers
-    const trainers = users.filter(user => user.role === 'trainer');
-
-    console.log('✅ [ADMIN_API] Retrieved trainers successfully');
+    console.log(`✅ [ADMIN_API] Retrieved ${trainers.length} trainers successfully`);
 
     return NextResponse.json({
       success: true,
@@ -137,4 +108,3 @@ export async function GET(request: NextRequest) {
     }, { status: 500 });
   }
 }
-

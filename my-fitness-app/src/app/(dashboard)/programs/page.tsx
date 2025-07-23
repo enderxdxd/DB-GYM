@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { debounce } from '@/lib/utils/helpers';
 import { WORKOUT_CATEGORIES } from '@/lib/utils/constants';
+import { Plus, Settings } from 'lucide-react';
 
 export default function ProgramsPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -60,20 +61,22 @@ export default function ProgramsPage() {
                 Discover workout programs designed by expert trainers to help you reach your goals.
               </p>
             </div>
-            <div className="mt-4 md:mt-0 flex space-x-2">
+            <div className="mt-4 md:mt-0 flex flex-col sm:flex-row gap-3">
               <Button 
-                variant="secondary" 
-                className="bg-white text-blue-600 hover:bg-gray-100"
+                variant="secondary"
+                className="bg-white text-blue-600 hover:bg-blue-50 flex items-center gap-2 shadow-md hover:shadow-lg transition-shadow"
                 onClick={() => window.location.href = '/programs/create'}
               >
-                Create Program
+                <Plus className="h-4 w-4" />
+                <span>Create Program</span>
               </Button>
               <Button 
-                variant="outline" 
-                className="border-white text-white hover:bg-white hover:text-blue-600"
+                variant="outline"
+                className="border-white text-white hover:bg-white/10 flex items-center gap-2 hover:border-blue-400 transition-colors"
                 onClick={() => window.location.href = '/programs/manage'}
               >
-                Manage Programs
+                <Settings className="h-4 w-4" />
+                <span>Manage Programs</span>
               </Button>
             </div>
           </div>

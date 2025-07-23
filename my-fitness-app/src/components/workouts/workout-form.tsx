@@ -409,5 +409,4 @@ export function EnhancedWorkoutForm({ programId, onSuccess, onCancel }: Enhanced
   );
 }
 
-// EXPORTAÇÃO DEFAULT TAMBÉM (para compatibilidade)
 export default EnhancedWorkoutForm;

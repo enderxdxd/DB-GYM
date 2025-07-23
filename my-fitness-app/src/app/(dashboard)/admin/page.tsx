@@ -44,7 +44,7 @@ export default function AdminDashboard() {
   const [showCreateTrainer, setShowCreateTrainer] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Verificar se é admin
+  // Check if user is admin
   const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
@@ -75,7 +75,7 @@ export default function AdminDashboard() {
             setUsers(response.data);
           } else {
             console.error('❌ [ADMIN_PAGE] Data is not an array:', response.data);
-            setError('Formato de dados inválido recebido do servidor');
+            setError('Invalid data format received from server');
           }
         } else {
           setError(response.error || 'Failed to load users');
@@ -101,9 +101,9 @@ export default function AdminDashboard() {
       <div className="flex items-center justify-center min-h-screen">
         <Card className="w-96">
           <CardContent className="p-6 text-center">
-            <h2 className="text-xl font-semibold mb-2">Acesso Negado</h2>
+            <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
             <p className="text-muted-foreground">
-              Você precisa de privilégios administrativos para acessar esta página.
+              You need administrative privileges to access this page.
             </p>
           </CardContent>
         </Card>
@@ -131,13 +131,13 @@ export default function AdminDashboard() {
     <AuthGuard>
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold">Painel Administrativo</h1>
+          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
           <div className="flex gap-4">
             <Button onClick={handleRefresh} variant="outline">
-              Atualizar
+              Refresh
             </Button>
             <Button onClick={() => setShowCreateTrainer(true)}>
-              Criar Trainer
+              Create Trainer
             </Button>
           </div>
         </div>
@@ -148,12 +148,12 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Estatísticas */}
+        {/* Statistics */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total de Usuários
+                Total Users
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -181,7 +181,7 @@ export default function AdminDashboard() {
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">{stats.trainers}</div>
               <p className="text-xs text-muted-foreground">
-                {stats.verifiedTrainers} verificados
+                {stats.verifiedTrainers} verified
               </p>
             </CardContent>
           </Card>
@@ -189,7 +189,7 @@ export default function AdminDashboard() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Clientes
+                Clients
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -200,7 +200,7 @@ export default function AdminDashboard() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Taxa de Verificação
+                Verification Rate
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -211,10 +211,10 @@ export default function AdminDashboard() {
           </Card>
         </div>
 
-        {/* Gerenciamento de Usuários */}
+        {/* User Management */}
         <Card>
           <CardHeader>
-            <CardTitle>Gerenciamento de Usuários</CardTitle>
+            <CardTitle>User Management</CardTitle>
           </CardHeader>
           <CardContent>
             <UserRoleManager 
@@ -224,7 +224,7 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Modal de Criação de Trainer */}
+        {/* Create Trainer Modal */}
         <CreateTrainerModal
           open={showCreateTrainer}
           onOpenChange={setShowCreateTrainer}

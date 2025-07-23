@@ -1,4 +1,3 @@
-// src/lib/hooks/use-workouts.ts
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '@/lib/utils/api-client';
 
@@ -31,6 +30,32 @@ interface UseWorkoutsReturn {
   clearError: () => void;
 }
 
+// Interfaces para respostas da API
+interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+interface WorkoutResponse {
+  success: boolean;
+  data?: SerializableWorkout[] | { data: SerializableWorkout[] };
+  error?: string;
+}
+
+interface CreateWorkoutResponse {
+  success: boolean;
+  data?: SerializableWorkout;
+  error?: string;
+}
+
+interface DeleteWorkoutResponse {
+  success: boolean;
+  data?: any;
+  error?: string;
+}
+
 export function useWorkouts(options: UseWorkoutsOptions = {}): UseWorkoutsReturn {
   const {
     programId,
@@ -56,25 +81,19 @@ export function useWorkouts(options: UseWorkoutsOptions = {}): UseWorkoutsReturn
         apiClient.setToken(token);
       }
 
-      // Preparar parâmetros da query
-      const params: any = {};
-      if (programId) params.program_id = programId;
-      if (includeExercises) params.include_exercises = 'true';
-
-      const response = await apiClient.getWorkouts(programId);
+      const response: WorkoutResponse = await apiClient.getWorkouts(programId);
       console.log('🔵 [USE_WORKOUTS] API Response:', response);
 
       if (response.success && response.data) {
         // Processar resposta
-        const responseData = response.data as any;
-        let workoutsArray: any[] = [];
+        let workoutsArray: SerializableWorkout[] = [];
 
-        if (Array.isArray(responseData)) {
-          workoutsArray = responseData;
-        } else if (responseData.data && Array.isArray(responseData.data)) {
-          workoutsArray = responseData.data;
+        if (Array.isArray(response.data)) {
+          workoutsArray = response.data;
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          workoutsArray = response.data.data;
         } else {
-          console.warn('🔶 [USE_WORKOUTS] Unexpected response format:', responseData);
+          console.warn('🔶 [USE_WORKOUTS] Unexpected response format:', response.data);
           workoutsArray = [];
         }
 
@@ -120,7 +139,7 @@ export function useWorkouts(options: UseWorkoutsOptions = {}): UseWorkoutsReturn
         apiClient.setToken(token);
       }
 
-      const response = await apiClient.createWorkout(workoutData);
+      const response: CreateWorkoutResponse = await apiClient.createWorkout(workoutData);
       
       if (response.success) {
         console.log('✅ [USE_WORKOUTS] Workout created successfully');
@@ -157,7 +176,7 @@ export function useWorkouts(options: UseWorkoutsOptions = {}): UseWorkoutsReturn
         apiClient.setToken(token);
       }
 
-      const response = await apiClient.delete(`/workouts/${workoutId}`);
+      const response: DeleteWorkoutResponse = await apiClient.delete(`/workouts/${workoutId}`);
       
       if (response.success) {
         console.log('✅ [USE_WORKOUTS] Workout deleted successfully');

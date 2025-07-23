@@ -1,46 +1,38 @@
-// src/lib/services/admin.service.ts
+// src/lib/services/admin.service.ts (CORREÇÃO FINAL DOS ERROS)
 import { sql } from '@/lib/database/neon';
 import bcrypt from 'bcryptjs';
-import { User, CreateUserData } from './user.service';
-import { logAdminAction } from '@/lib/auth/admin-permissions';
 
 export interface CreateTrainerData {
   first_name: string;
   last_name: string;
   email: string;
   password: string;
-  specialization?: string;
-  experience_years?: number;
-  certification?: string;
+  certification_details?: string;
   bio?: string;
-  hourly_rate?: number;
 }
 
 export interface TrainerProfile {
-  user_id: number;
   trainer_id: number;
   first_name: string;
   last_name: string;
   email: string;
-  role: string;
-  specialization?: string;
-  experience_years: number;
-  certification?: string;
+  certification_details?: string;
   bio?: string;
-  hourly_rate?: number;
-  is_verified: boolean;
   created_at: Date;
   updated_at: Date;
 }
 
-export interface UserWithRole extends User {
+export interface UserWithRole {
+  user_id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  role: 'client' | 'trainer' | 'admin';
   trainer_id?: number;
-  specialization?: string;
-  experience_years?: number;
-  certification?: string;
+  certification_details?: string;
   bio?: string;
-  hourly_rate?: number;
-  is_verified?: boolean;
+  created_at: Date;
+  updated_at: Date;
 }
 
 export class AdminService {
@@ -54,72 +46,57 @@ export class AdminService {
     console.log('🔵 [ADMIN_SERVICE] Creating trainer profile...');
     
     try {
-      // 1. Criar usuário com role trainer
-      const hashedPassword = await bcrypt.hash(trainerData.password, 12);
-      
-      const userResult = await sql`
-        INSERT INTO users (first_name, last_name, email, password_hash, role)
-        VALUES (${trainerData.first_name}, ${trainerData.last_name}, ${trainerData.email}, ${hashedPassword}, 'trainer')
-        RETURNING *
+      // 1. Verificar se email já existe na tabela users
+      const usersWithEmail = await sql`
+        SELECT email FROM users WHERE email = ${trainerData.email}
       `;
       
-      if (!userResult || userResult.length === 0) {
-        throw new Error('Failed to create user');
+      // 2. Verificar se email já existe na tabela trainers
+      const trainersWithEmail = await sql`
+        SELECT email FROM trainers WHERE email = ${trainerData.email}
+      `;
+      
+      if (usersWithEmail.length > 0 || trainersWithEmail.length > 0) {
+        throw new Error('Email already exists');
       }
       
-      const newUser = userResult[0];
+      // 3. Hash da senha
+      const hashedPassword = await bcrypt.hash(trainerData.password, 12);
       
-      // 2. Criar perfil de trainer
+      // 4. Criar registro na tabela trainers
       const trainerResult = await sql`
         INSERT INTO trainers (
-          user_id, specialization, experience_years, certification, bio, hourly_rate
+          first_name, last_name, email, password_hash, 
+          certification_details, bio
         )
         VALUES (
-          ${newUser.user_id}, 
-          ${trainerData.specialization || null}, 
-          ${trainerData.experience_years || 0}, 
-          ${trainerData.certification || null}, 
-          ${trainerData.bio || null}, 
-          ${trainerData.hourly_rate || null}
+          ${trainerData.first_name}, 
+          ${trainerData.last_name}, 
+          ${trainerData.email}, 
+          ${hashedPassword},
+          ${trainerData.certification_details || null}, 
+          ${trainerData.bio || null}
         )
         RETURNING *
       `;
       
-      if (!trainerResult || trainerResult.length === 0) {
+      if (trainerResult.length === 0) {
         throw new Error('Failed to create trainer profile');
       }
       
-      const trainerProfile = trainerResult[0];
-      
-      // 3. Log da ação administrativa
-      await logAdminAction(
-        adminUserId,
-        'CREATE_TRAINER',
-        newUser.user_id,
-        `Created trainer profile for ${newUser.email}`,
-        { 
-          trainer_id: trainerProfile.trainer_id,
-          specialization: trainerData.specialization 
-        }
-      );
+      const trainer = trainerResult[0] as any;
       
       console.log('✅ [ADMIN_SERVICE] Trainer profile created successfully');
       
       return {
-        user_id: newUser.user_id,
-        trainer_id: trainerProfile.trainer_id,
-        first_name: newUser.first_name,
-        last_name: newUser.last_name,
-        email: newUser.email,
-        role: newUser.role,
-        specialization: trainerProfile.specialization,
-        experience_years: trainerProfile.experience_years,
-        certification: trainerProfile.certification,
-        bio: trainerProfile.bio,
-        hourly_rate: trainerProfile.hourly_rate,
-        is_verified: trainerProfile.is_verified,
-        created_at: newUser.created_at,
-        updated_at: newUser.updated_at
+        trainer_id: trainer.trainer_id,
+        first_name: trainer.first_name,
+        last_name: trainer.last_name,
+        email: trainer.email,
+        certification_details: trainer.certification_details,
+        bio: trainer.bio,
+        created_at: trainer.created_at,
+        updated_at: trainer.updated_at
       };
       
     } catch (error) {
@@ -130,25 +107,80 @@ export class AdminService {
 
   /**
    * Lista todos os usuários com suas roles
+   * Combina dados das tabelas users e trainers
    */
   async getAllUsers(): Promise<UserWithRole[]> {
     try {
-      const result = await sql`
+      console.log('🔵 [ADMIN_SERVICE] Getting all users...');
+      
+      // 1. Buscar todos os usuários da tabela users
+      const users = await sql`
         SELECT 
-          u.*,
-          t.trainer_id,
-          t.specialization,
-          t.experience_years,
-          t.certification,
-          t.bio,
-          t.hourly_rate,
-          t.is_verified
-        FROM users u
-        LEFT JOIN trainers t ON u.user_id = t.user_id
-        ORDER BY u.created_at DESC
+          user_id,
+          first_name,
+          last_name,
+          email,
+          role,
+          created_at,
+          updated_at
+        FROM users
+        ORDER BY created_at DESC
       `;
       
-      return result as UserWithRole[];
+      // 2. Buscar todos os trainers da tabela trainers
+      const trainers = await sql`
+        SELECT 
+          trainer_id,
+          first_name,
+          last_name,
+          email,
+          certification_details,
+          bio,
+          created_at,
+          updated_at
+        FROM trainers
+        ORDER BY created_at DESC
+      `;
+      
+      // 3. Combinar os dados
+      const allUsers: UserWithRole[] = [];
+      
+      // Adicionar usuários da tabela users
+      users.forEach((user: any) => {
+        allUsers.push({
+          user_id: user.user_id,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          email: user.email,
+          role: user.role,
+          created_at: user.created_at,
+          updated_at: user.updated_at
+        });
+      });
+      
+      // Adicionar trainers da tabela trainers (com role 'trainer')
+      trainers.forEach((trainer: any) => {
+        allUsers.push({
+          user_id: trainer.trainer_id, // Usar trainer_id como user_id para compatibilidade
+          trainer_id: trainer.trainer_id,
+          first_name: trainer.first_name,
+          last_name: trainer.last_name,
+          email: trainer.email,
+          role: 'trainer',
+          certification_details: trainer.certification_details,
+          bio: trainer.bio,
+          created_at: trainer.created_at,
+          updated_at: trainer.updated_at
+        });
+      });
+      
+      // Ordenar por data de criação
+      allUsers.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      
+      console.log(`✅ [ADMIN_SERVICE] Retrieved ${allUsers.length} users (${users.length} from users table, ${trainers.length} from trainers table)`);
+      
+      return allUsers;
+      
     } catch (error) {
       console.error('❌ [ADMIN_SERVICE] Error getting all users:', error);
       throw error;
@@ -156,31 +188,49 @@ export class AdminService {
   }
 
   /**
-   * Atualiza a role de um usuário
+   * Busca apenas trainers
+   */
+  async getAllTrainers(): Promise<TrainerProfile[]> {
+    try {
+      console.log('🔵 [ADMIN_SERVICE] Getting all trainers...');
+      
+      const trainers = await sql`
+        SELECT * FROM trainers
+        ORDER BY created_at DESC
+      `;
+      
+      console.log(`✅ [ADMIN_SERVICE] Retrieved ${trainers.length} trainers`);
+      
+      // Mapear explicitamente para garantir tipagem correta
+      return trainers.map((trainer: any): TrainerProfile => ({
+        trainer_id: trainer.trainer_id,
+        first_name: trainer.first_name,
+        last_name: trainer.last_name,
+        email: trainer.email,
+        certification_details: trainer.certification_details,
+        bio: trainer.bio,
+        created_at: trainer.created_at,
+        updated_at: trainer.updated_at
+      }));
+      
+    } catch (error) {
+      console.error('❌ [ADMIN_SERVICE] Error getting trainers:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Atualiza a role de um usuário (apenas para tabela users)
    */
   async updateUserRole(
     adminUserId: number,
     targetUserId: number,
     newRole: 'client' | 'trainer' | 'admin'
-  ): Promise<User> {
+  ): Promise<any> {
     console.log('🔵 [ADMIN_SERVICE] Updating user role...');
     
     try {
-      // Se está removendo role de trainer, remover da tabela trainers
-      if (newRole !== 'trainer') {
-        await sql`DELETE FROM trainers WHERE user_id = ${targetUserId}`;
-      }
-      
-      // Se está promovendo para trainer, criar entrada na tabela trainers
-      if (newRole === 'trainer') {
-        await sql`
-          INSERT INTO trainers (user_id, experience_years, is_verified)
-          VALUES (${targetUserId}, 0, false)
-          ON CONFLICT (user_id) DO NOTHING
-        `;
-      }
-      
-      // Atualizar role do usuário
+      // Atualizar role do usuário na tabela users
       const result = await sql`
         UPDATE users 
         SET role = ${newRole}, updated_at = CURRENT_TIMESTAMP
@@ -188,21 +238,12 @@ export class AdminService {
         RETURNING *
       `;
       
-      if (!result || result.length === 0) {
+      if (result.length === 0) {
         throw new Error('User not found');
       }
       
-      // Log da ação
-      await logAdminAction(
-        adminUserId,
-        'UPDATE_ROLE',
-        targetUserId,
-        `Updated user role to ${newRole}`,
-        { new_role: newRole }
-      );
-      
       console.log('✅ [ADMIN_SERVICE] User role updated successfully');
-      return result[0] as User;
+      return result[0];
       
     } catch (error) {
       console.error('❌ [ADMIN_SERVICE] Error updating user role:', error);
@@ -211,64 +252,111 @@ export class AdminService {
   }
 
   /**
-   * Verifica ou atualiza status de verificação do trainer
+   * Deleta um trainer
    */
-  async updateTrainerVerification(
-    adminUserId: number,
-    trainerId: number,
-    isVerified: boolean
-  ): Promise<boolean> {
+  async deleteTrainer(trainerId: number): Promise<boolean> {
     try {
+      console.log('🔵 [ADMIN_SERVICE] Deleting trainer...');
+      
       const result = await sql`
-        UPDATE trainers 
-        SET is_verified = ${isVerified}, updated_at = CURRENT_TIMESTAMP
+        DELETE FROM trainers 
         WHERE trainer_id = ${trainerId}
-        RETURNING trainer_id, user_id
+        RETURNING trainer_id
       `;
       
-      if (result && result.length > 0) {
-        await logAdminAction(
-          adminUserId,
-          'UPDATE_TRAINER_VERIFICATION',
-          result[0].user_id,
-          `${isVerified ? 'Verified' : 'Unverified'} trainer`,
-          { trainer_id: trainerId, is_verified: isVerified }
-        );
-        
+      if (result.length > 0) {
+        console.log('✅ [ADMIN_SERVICE] Trainer deleted successfully');
         return true;
       }
       
       return false;
+      
     } catch (error) {
-      console.error('❌ [ADMIN_SERVICE] Error updating trainer verification:', error);
+      console.error('❌ [ADMIN_SERVICE] Error deleting trainer:', error);
       throw error;
     }
   }
 
   /**
-   * Busca logs de ações administrativas
+   * Atualiza dados de um trainer - CORRIGIDO PARA NEON
    */
-  async getAdminActions(limit: number = 50): Promise<any[]> {
+  async updateTrainer(
+    trainerId: number, 
+    updateData: Partial<CreateTrainerData>
+  ): Promise<TrainerProfile | null> {
     try {
-      const result = await sql`
-        SELECT 
-          aa.*,
-          u.first_name as admin_first_name,
-          u.last_name as admin_last_name,
-          u.email as admin_email,
-          tu.first_name as target_first_name,
-          tu.last_name as target_last_name,
-          tu.email as target_email
-        FROM admin_actions aa
-        INNER JOIN users u ON aa.admin_user_id = u.user_id
-        LEFT JOIN users tu ON aa.target_user_id = tu.user_id
-        ORDER BY aa.created_at DESC
-        LIMIT ${limit}
+      console.log('🔵 [ADMIN_SERVICE] Updating trainer...');
+      
+      // ✅ CORREÇÃO: Construir query com valores interpolados diretamente
+      const updates: string[] = [];
+      
+      if (updateData.first_name !== undefined) {
+        const escapedValue = updateData.first_name.replace(/'/g, "''");
+        updates.push(`first_name = '${escapedValue}'`);
+      }
+      
+      if (updateData.last_name !== undefined) {
+        const escapedValue = updateData.last_name.replace(/'/g, "''");
+        updates.push(`last_name = '${escapedValue}'`);
+      }
+      
+      if (updateData.certification_details !== undefined) {
+        if (updateData.certification_details === null || updateData.certification_details === '') {
+          updates.push(`certification_details = NULL`);
+        } else {
+          const escapedValue = updateData.certification_details.replace(/'/g, "''");
+          updates.push(`certification_details = '${escapedValue}'`);
+        }
+      }
+      
+      if (updateData.bio !== undefined) {
+        if (updateData.bio === null || updateData.bio === '') {
+          updates.push(`bio = NULL`);
+        } else {
+          const escapedValue = updateData.bio.replace(/'/g, "''");
+          updates.push(`bio = '${escapedValue}'`);
+        }
+      }
+      
+      if (updates.length === 0) {
+        throw new Error('No fields to update');
+      }
+      
+      updates.push('updated_at = CURRENT_TIMESTAMP');
+      
+      // ✅ CORREÇÃO: Query com valores interpolados e apenas um parâmetro
+      const query = `
+        UPDATE trainers 
+        SET ${updates.join(', ')}
+        WHERE trainer_id = ${trainerId}
+        RETURNING *
       `;
       
-      return result;
+      console.log('🔍 [ADMIN_SERVICE] Update query:', query);
+      
+      // ✅ CORREÇÃO: sql.unsafe com apenas um parâmetro
+      const result = await sql.unsafe(query) as unknown as any[];
+      
+      // ✅ CORREÇÃO: Verificação de resultado correta
+      if (result && Array.isArray(result) && result.length > 0) {
+        console.log('✅ [ADMIN_SERVICE] Trainer updated successfully');
+        const trainer = result[0];
+        return {
+          trainer_id: trainer.trainer_id,
+          first_name: trainer.first_name,
+          last_name: trainer.last_name,
+          email: trainer.email,
+          certification_details: trainer.certification_details,
+          bio: trainer.bio,
+          created_at: trainer.created_at,
+          updated_at: trainer.updated_at
+        };
+      }
+      
+      return null;
+      
     } catch (error) {
-      console.error('❌ [ADMIN_SERVICE] Error getting admin actions:', error);
+      console.error('❌ [ADMIN_SERVICE] Error updating trainer:', error);
       throw error;
     }
   }

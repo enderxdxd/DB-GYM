@@ -24,7 +24,6 @@ interface AuthContextType {
   refreshToken: () => Promise<boolean>;
 }
 
-// Interface para tipagem das respostas da API
 interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
@@ -43,85 +42,133 @@ interface RefreshTokenResponse {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Variável global para evitar múltiplas inicializações
-let authInitialized = false;
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
+
+  // Função para debug
+  const debugLog = (message: string, data?: any) => {
+    console.log(`🔍 [AUTH_DEBUG] ${message}`, data || '');
+  };
 
   // Função para carregar o usuário baseado no token
-  const loadUser = useCallback(async (skipTokenCheck = false) => {
-    // Evitar múltiplas inicializações simultâneas
-    if (authInitialized && !skipTokenCheck) {
-      console.log('ℹ️ [AUTH] Already initialized, skipping...');
-      setLoading(false);
-      return;
-    }
-
-    console.log('🔵 [AUTH] Loading user... skipTokenCheck:', skipTokenCheck);
+  const loadUser = useCallback(async () => {
+    debugLog('=== INICIANDO LOAD USER ===');
     
     try {
       // Verificar se estamos no navegador
       if (typeof window === 'undefined') {
-        console.log('ℹ️ [AUTH] Server-side rendering, skipping token check');
+        debugLog('Server-side rendering detected, skipping');
         setLoading(false);
         return;
       }
 
-      if (!skipTokenCheck) {
-        const token = localStorage.getItem('accessToken');
-        
-        if (!token) {
-          console.log('ℹ️ [AUTH] No token found');
-          setLoading(false);
-          authInitialized = true;
-          return;
-        }
+      const token = localStorage.getItem('accessToken');
+      debugLog('Token do localStorage:', {
+        exists: !!token,
+        length: token?.length || 0,
+        preview: token?.substring(0, 30) + '...' || 'null'
+      });
+      
+      if (!token) {
+        debugLog('Nenhum token encontrado, usuário não logado');
+        setLoading(false);
+        setInitialized(true);
+        return;
+      }
 
-        console.log('🔵 [AUTH] Token found, setting in API client...');
-        apiClient.setToken(token);
+      // Verificar se o token não é uma string vazia
+      if (token.trim() === '') {
+        debugLog('Token vazio encontrado, removendo');
+        localStorage.removeItem('accessToken');
+        setLoading(false);
+        setInitialized(true);
+        return;
+      }
+
+      // Tentar decodificar o token para verificar se está válido
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        debugLog('Token decodificado:', {
+          userId: payload.userId,
+          email: payload.email,
+          exp: payload.exp,
+          currentTime: Math.floor(Date.now() / 1000),
+          isExpired: payload.exp < Math.floor(Date.now() / 1000)
+        });
+
+        // Se o token está claramente expirado, tentar refresh
+        if (payload.exp < Math.floor(Date.now() / 1000)) {
+          debugLog('Token expirado, tentando refresh...');
+          const refreshSuccess = await refreshTokenInternal();
+          if (!refreshSuccess) {
+            debugLog('Refresh falhou, limpando token');
+            localStorage.removeItem('accessToken');
+            apiClient.clearToken();
+            setLoading(false);
+            setInitialized(true);
+            return;
+          }
+          // Se refresh teve sucesso, continuar com o novo token
+          const newToken = localStorage.getItem('accessToken');
+          if (newToken) {
+            apiClient.setToken(newToken);
+          }
+        } else {
+          // Token ainda válido, definir no cliente
+          debugLog('Token ainda válido, definindo no API client');
+          apiClient.setToken(token);
+        }
+      } catch (decodeError) {
+        debugLog('Erro ao decodificar token:', decodeError);
+        localStorage.removeItem('accessToken');
+        setLoading(false);
+        setInitialized(true);
+        return;
       }
       
-      console.log('🔵 [AUTH] Fetching user profile...');
+      debugLog('Buscando perfil do usuário...');
       const response: ApiResponse<User> = await apiClient.getProfile();
       
+      debugLog('Resposta do perfil:', {
+        success: response.success,
+        hasData: !!response.data,
+        error: response.error
+      });
+      
       if (response.success && response.data) {
-        console.log('✅ [AUTH] User loaded successfully');
-        const userData = response.data;
-        if (userData.role) {
-          console.log('🔵 [AUTH] User role:', userData.role);
-        }
-        setUser(userData);
+        debugLog('Usuário carregado com sucesso:', {
+          userId: response.data.user_id,
+          email: response.data.email,
+          role: response.data.role
+        });
+        setUser(response.data);
       } else {
-        console.log('❌ [AUTH] Failed to load user:', response.error);
-        // Token pode estar expirado, tentar refresh
+        debugLog('Falha ao carregar usuário, tentando refresh...');
         const refreshSuccess = await refreshTokenInternal();
         if (!refreshSuccess) {
-          console.log('🔵 [AUTH] Refresh failed, clearing tokens');
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('accessToken');
-          }
+          debugLog('Refresh falhou, limpando tokens');
+          localStorage.removeItem('accessToken');
           apiClient.clearToken();
           setUser(null);
         }
       }
     } catch (error) {
-      console.error('❌ [AUTH] Error loading user:', error);
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('accessToken');
-      }
+      debugLog('Erro durante loadUser:', error);
+      localStorage.removeItem('accessToken');
       apiClient.clearToken();
       setUser(null);
     } finally {
       setLoading(false);
-      authInitialized = true;
+      setInitialized(true);
+      debugLog('=== LOAD USER FINALIZADO ===');
     }
   }, []);
 
   // Função interna para refresh do token
   const refreshTokenInternal = async (): Promise<boolean> => {
-    console.log('🔵 [AUTH] Attempting token refresh...');
+    debugLog('Tentando refresh do token...');
     
     try {
       const response = await fetch('/api/auth/refresh-token', {
@@ -129,11 +176,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         credentials: 'include',
       });
 
+      debugLog('Resposta do refresh:', {
+        status: response.status,
+        ok: response.ok
+      });
+
       if (response.ok) {
         const data: RefreshTokenResponse = await response.json();
         const newToken = data.accessToken;
         
-        console.log('✅ [AUTH] Token refreshed successfully');
+        debugLog('Token refreshed com sucesso, novo token:', {
+          length: newToken?.length || 0,
+          preview: newToken?.substring(0, 30) + '...' || 'null'
+        });
+        
         if (typeof window !== 'undefined') {
           localStorage.setItem('accessToken', newToken);
         }
@@ -147,32 +203,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
       
-      console.log('❌ [AUTH] Token refresh failed');
+      debugLog('Refresh falhou');
       return false;
     } catch (error) {
-      console.error('❌ [AUTH] Token refresh error:', error);
+      debugLog('Erro durante refresh:', error);
       return false;
     }
   };
 
   // Inicialização - apenas uma vez quando o componente monta
   useEffect(() => {
-    console.log('🔵 [AUTH] AuthProvider mounting, initialized:', authInitialized);
-    
-    // Verificar se já foi inicializado
-    if (!authInitialized) {
-      console.log('🔵 [AUTH] First initialization...');
+    if (!initialized) {
+      debugLog('Iniciando AuthProvider pela primeira vez');
       loadUser();
-    } else {
-      console.log('🔵 [AUTH] Already initialized, setting loading to false');
-      setLoading(false);
     }
-
-    // Cleanup function para reset quando o componente desmonta
-    return () => {
-      console.log('🔵 [AUTH] AuthProvider unmounting');
-    };
-  }, [loadUser]);
+  }, [initialized, loadUser]);
 
   // Configurar listeners para mudanças no localStorage (multi-tab)
   useEffect(() => {
@@ -180,10 +225,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const handleStorage = (event: StorageEvent) => {
       if (event.key === 'accessToken') {
-        console.log('🔵 [AUTH] Token changed in localStorage from another tab');
+        debugLog('Token mudou em outra aba:', {
+          newValue: event.newValue?.substring(0, 30) + '...' || 'null'
+        });
         if (event.newValue) {
           apiClient.setToken(event.newValue);
-          loadUser(true); // Skip token check since we just set it
+          loadUser();
         } else {
           apiClient.clearToken();
           setUser(null);
@@ -196,23 +243,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadUser]);
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    console.log('🔵 [AUTH] Attempting login for:', email);
+    debugLog('Tentando login para:', email);
     
     try {
       const response: ApiResponse<AuthResponse> = await apiClient.login(email, password);
       
+      debugLog('Resposta do login:', {
+        success: response.success,
+        hasData: !!response.data,
+        error: response.error
+      });
+      
       if (response.success && response.data) {
         const { user: userData, accessToken } = response.data;
         
-        console.log('✅ [AUTH] Login successful, setting token and user');
-        if (userData.role) {
-          console.log('🔵 [AUTH] User role:', userData.role);
-        }
-        console.log('🔵 [AUTH] Token preview:', accessToken.substring(0, 20) + '...');
+        debugLog('Login bem-sucedido:', {
+          userId: userData.user_id,
+          email: userData.email,
+          role: userData.role,
+          tokenLength: accessToken.length,
+          tokenPreview: accessToken.substring(0, 30) + '...'
+        });
         
         // Definir token primeiro
         if (typeof window !== 'undefined') {
           localStorage.setItem('accessToken', accessToken);
+          debugLog('Token salvo no localStorage');
         }
         apiClient.setToken(accessToken);
         
@@ -221,17 +277,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         return true;
       } else {
-        console.log('❌ [AUTH] Login failed:', response.error);
+        debugLog('Login falhou:', response.error);
         return false;
       }
     } catch (error) {
-      console.error('❌ [AUTH] Login error:', error);
+      debugLog('Erro durante login:', error);
       return false;
     }
   };
 
   const register = async (userData: any): Promise<boolean> => {
-    console.log('🔵 [AUTH] Attempting registration for:', userData.email);
+    debugLog('Tentando registro para:', userData.email);
     
     try {
       const response: ApiResponse<AuthResponse> = await apiClient.register(userData);
@@ -239,11 +295,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (response.success && response.data) {
         const { user: newUser, accessToken } = response.data;
         
-        console.log('✅ [AUTH] Registration successful, setting token and user');
-        if (newUser.role) {
-          console.log('🔵 [AUTH] User role:', newUser.role);
-        }
-        console.log('🔵 [AUTH] Token preview:', accessToken.substring(0, 20) + '...');
+        debugLog('Registro bem-sucedido:', {
+          userId: newUser.user_id,
+          email: newUser.email,
+          role: newUser.role
+        });
         
         // Definir token primeiro
         if (typeof window !== 'undefined') {
@@ -256,17 +312,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         return true;
       } else {
-        console.log('❌ [AUTH] Registration failed:', response.error);
+        debugLog('Registro falhou:', response.error);
         return false;
       }
     } catch (error) {
-      console.error('❌ [AUTH] Registration error:', error);
+      debugLog('Erro durante registro:', error);
       return false;
     }
   };
 
   const logout = () => {
-    console.log('🔵 [AUTH] Logging out...');
+    debugLog('Fazendo logout...');
     
     if (typeof window !== 'undefined') {
       localStorage.removeItem('accessToken');
@@ -275,11 +331,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     
     // Reset da flag de inicialização para permitir nova inicialização após logout
-    authInitialized = false;
+    setInitialized(false);
     
     // Chamar endpoint de logout para limpar cookies
     apiClient.logout().catch(error => {
-      console.warn('⚠️ [AUTH] Logout endpoint failed:', error);
+      debugLog('Erro ao chamar endpoint de logout:', error);
     });
   };
 

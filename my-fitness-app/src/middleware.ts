@@ -1,5 +1,5 @@
 // ================================
-// src/middleware.ts - VERSÃO CORRIGIDA COM REGEX FUNCIONAL
+// src/middleware.ts - VERSÃO FINAL CORRIGIDA COM ANALYTICS
 // ================================
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyTokenEdge } from '@/lib/auth/edge-jwt';
@@ -28,6 +28,7 @@ export async function middleware(request: NextRequest) {
     '/api/auth/register',
     '/api/auth/logout',
     '/api/auth/refresh-token',
+    '/api/auth/profile',  
     '/api/test-db',
     '/api/init-db',
     '/api/programs',           // ✅ Listar programas é público
@@ -66,6 +67,7 @@ export async function middleware(request: NextRequest) {
     const isSubscribeRoute = /^\/api\/programs\/\d+\/subscribe$/.test(pathname);
     const isUnsubscribeRoute = /^\/api\/programs\/\d+\/unsubscribe$/.test(pathname);
     const isSubscriptionsRoute = pathname === '/api/subscriptions';
+    const isAnalyticsRoute = pathname.startsWith('/api/analytics');  // ✅ ANALYTICS ADICIONADO
     const isProtectedUserRoute = pathname.startsWith('/api/users') || 
                                 pathname.startsWith('/api/progress') || 
                                 pathname.startsWith('/api/workouts') || 
@@ -74,12 +76,13 @@ export async function middleware(request: NextRequest) {
                                 pathname.startsWith('/api/payments');
 
     // Se é uma rota protegida
-    if (isSubscribeRoute || isUnsubscribeRoute || isSubscriptionsRoute || isProtectedUserRoute) {
+    if (isSubscribeRoute || isUnsubscribeRoute || isSubscriptionsRoute || isAnalyticsRoute || isProtectedUserRoute) {
       console.log('🔵 [MIDDLEWARE] Protected API route detected:', pathname);
       console.log('🔵 [MIDDLEWARE] Route type:', {
         isSubscribeRoute,
         isUnsubscribeRoute,
         isSubscriptionsRoute,
+        isAnalyticsRoute,  // ✅ ANALYTICS ADICIONADO
         isProtectedUserRoute
       });
 
@@ -149,66 +152,3 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|public|.*\\.png|.*\\.jpg|.*\\.jpeg|.*\\.gif|.*\\.svg|.*\\.ico|.*\\.css|.*\\.js).*)',
   ],
 };
-
-// ================================
-// VERSÃO ALTERNATIVA MAIS SIMPLES (use se a acima não funcionar)
-// ================================
-
-export async function middlewareSimple(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  console.log('🔵 [MIDDLEWARE] Processing request to:', pathname);
-
-  // ✅ Lista explícita de rotas protegidas
-  const protectedRoutes = [
-    '/api/subscriptions',
-    '/api/users',
-    '/api/progress',
-    '/api/workouts',
-    '/api/nutrition',
-    '/api/reviews',
-    '/api/payments'
-  ];
-
-  // ✅ Verificar se é subscribe/unsubscribe especificamente
-  const isSubscribeUnsubscribe = pathname.match(/^\/api\/programs\/\d+\/(subscribe|unsubscribe)$/);
-
-  // Se é uma rota protegida ou subscribe/unsubscribe
-  if (protectedRoutes.some(route => pathname.startsWith(route)) || isSubscribeUnsubscribe) {
-    console.log('🔵 [MIDDLEWARE] Protected route detected:', pathname);
-
-    const authHeader = request.headers.get('authorization');
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.log('❌ [MIDDLEWARE] Missing auth header');
-      return NextResponse.json(
-        { error: 'Authorization required' },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.substring(7);
-    
-    try {
-      const payload = await verifyTokenEdge(token);
-      
-      // Adicionar user info aos headers
-      const requestHeaders = new Headers(request.headers);
-      requestHeaders.set('x-user-id', payload.userId.toString());
-      requestHeaders.set('x-user-email', payload.email);
-
-      return NextResponse.next({
-        request: { headers: requestHeaders },
-      });
-    } catch (error) {
-      console.error('❌ [MIDDLEWARE] Token verification failed:', error);
-      return NextResponse.json(
-        { error: 'Invalid token' },
-        { status: 401 }
-      );
-    }
-  }
-
-  // Todas as outras rotas passam sem autenticação
-  return NextResponse.next();
-}

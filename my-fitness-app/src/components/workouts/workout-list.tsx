@@ -1,8 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Workout } from '@/lib/types';
-import WorkoutCard from './workout-card';
 import { apiClient } from '@/lib/utils/api-client';
 import Link from 'next/link';
 
@@ -50,10 +48,13 @@ export default function WorkoutList({
     setError(null);
 
     try {
-      // Garantir que o token esteja disponível
-      const token = localStorage.getItem('accessToken');
-      if (token) {
-        apiClient.setToken(token);
+      // Verificar se estamos no navegador antes de acessar localStorage
+      let token: string | null = null;
+      if (typeof window !== 'undefined') {
+        token = localStorage.getItem('accessToken');
+        if (token) {
+          apiClient.setToken(token);
+        }
       }
       
       const response = await apiClient.delete(`/workouts/${workoutId}`);

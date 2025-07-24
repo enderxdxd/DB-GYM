@@ -67,7 +67,7 @@ export async function middleware(request: NextRequest) {
     const isSubscribeRoute = /^\/api\/programs\/\d+\/subscribe$/.test(pathname);
     const isUnsubscribeRoute = /^\/api\/programs\/\d+\/unsubscribe$/.test(pathname);
     const isSubscriptionsRoute = pathname === '/api/subscriptions';
-    const isAnalyticsRoute = pathname.startsWith('/api/analytics');  // ✅ ANALYTICS ADICIONADO
+    const isAnalyticsRoute = pathname.startsWith('/api/analytics');  
     const isProtectedUserRoute = pathname.startsWith('/api/users') || 
                                 pathname.startsWith('/api/progress') || 
                                 pathname.startsWith('/api/workouts') || 
@@ -82,7 +82,7 @@ export async function middleware(request: NextRequest) {
         isSubscribeRoute,
         isUnsubscribeRoute,
         isSubscriptionsRoute,
-        isAnalyticsRoute,  // ✅ ANALYTICS ADICIONADO
+        isAnalyticsRoute,  
         isProtectedUserRoute
       });
 

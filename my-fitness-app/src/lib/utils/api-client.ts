@@ -245,26 +245,53 @@ class ApiClient {
     return this.delete<any>(`/api/programs/${id}`);
   }
 
-  // Workouts
   async getWorkouts(programId?: number): Promise<ApiResponse<any[]>> {
-    const queryParams = programId ? `?program_id=${programId}` : '';
-    return this.get<any[]>(`/api/workouts${queryParams}`);
+    console.log('🔵 [API_CLIENT] Getting workouts with programId:', programId);
+    
+    const queryParams = programId ? 
+      new URLSearchParams({ program_id: programId.toString() }).toString() : '';
+    
+    const endpoint = `/api/workouts${queryParams ? `?${queryParams}` : ''}`;
+    console.log('🔵 [API_CLIENT] Workouts endpoint:', endpoint);
+    
+    return this.get<any[]>(endpoint);
   }
-
+  
   async getWorkout(id: number): Promise<ApiResponse<any>> {
+    console.log('🔵 [API_CLIENT] Getting workout with ID:', id);
     return this.get<any>(`/api/workouts/${id}`);
   }
-
+  
   async createWorkout(data: any): Promise<ApiResponse<any>> {
+    console.log('🔵 [API_CLIENT] Creating workout with data:', data);
     return this.post<any>('/api/workouts', data);
   }
-
+  
   async updateWorkout(id: number, data: any): Promise<ApiResponse<any>> {
+    console.log('🔵 [API_CLIENT] Updating workout with ID:', id);
     return this.put<any>(`/api/workouts/${id}`, data);
   }
-
+  
   async deleteWorkout(id: number): Promise<ApiResponse<any>> {
+    console.log('🔵 [API_CLIENT] Deleting workout with ID:', id);
     return this.delete<any>(`/api/workouts/${id}`);
+  }
+  
+  // Exercises
+  async getWorkoutExercises(workoutId: number): Promise<ApiResponse<any[]>> {
+    console.log('🔵 [API_CLIENT] Getting exercises for workout:', workoutId);
+    return this.get<any[]>(`/api/workouts/${workoutId}/exercises`);
+  }
+  
+  async createExercise(workoutId: number, data: any): Promise<ApiResponse<any>> {
+    console.log('🔵 [API_CLIENT] Creating exercise for workout:', workoutId);
+    return this.post<any>(`/api/workouts/${workoutId}/exercises`, data);
+  }
+  
+  
+  async cancelSubscription(subscriptionId: number): Promise<ApiResponse<any>> {
+    console.log('🔵 [API_CLIENT] Cancelling subscription:', subscriptionId);
+    return this.delete<any>(`/api/subscriptions/${subscriptionId}`);
   }
 
   // Admin routes
@@ -331,6 +358,7 @@ class ApiClient {
   async getAnalyticsAverageProgramsPerTrainer(category: string = 'Yoga'): Promise<ApiResponse<any>> {
     return this.get<any>(`/api/analytics/programs/average-per-trainer?category=${category}`);
   }
+  
 
   async getAnalyticsUsersCompletedPrograms(options: {
     programId?: number,
